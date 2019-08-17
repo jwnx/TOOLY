@@ -2,25 +2,20 @@
 ; constants
 ;----------------------------------------------------------------
 
-PRG_COUNT = 1 ;1 = 16KB, 2 = 32KB
-MIRRORING = %0001 ;%0000 = horizontal, %0001 = vertical, %1000 = four-screen
+	STATETITLE     = $00  ; displaying title screen
+	STATEPLAYING   = $01  ; move paddles/ball, check for collisions
+	STATEGAMEOVER  = $02  ; displaying game over screen
 
-STATETITLE     = $00  ; displaying title screen
-STATEPLAYING   = $01  ; move paddles/ball, check for collisions
-STATEGAMEOVER  = $02  ; displaying game over screen
-  
-RIGHTWALL      = $F4  ; when ball reaches one of these, do something
-TOPWALL        = $20
-BOTTOMWALL     = $E0
-LEFTWALL       = $04
-  
-PADDLE1X       = $08  ; horizontal position for paddles, doesnt move
-PADDLE2X       = $F0
+	RIGHTWALL      = $F4  ; when ball reaches one of these, do something
+	TOPWALL        = $20
+	BOTTOMWALL     = $E0
+	LEFTWALL       = $04
+
 ;----------------------------------------------------------------
 ; variables
 ;----------------------------------------------------------------
 
-   .enum $0000
+  .org $0010
 
   gamestate       .dsb 1
 
@@ -49,31 +44,20 @@ PADDLE2X       = $F0
    ;MyVariable0 .dsb 1
    ;MyVariable1 .dsb 3
 
-   .ende
-
-   ;NOTE: you can also split the variable declarations into individual pages, like this:
-
-   ;.enum $0100
-   ;.ende
-
-   ;.enum $0200
-   ;.ende
-
 ;----------------------------------------------------------------
 ; iNES header
 ;----------------------------------------------------------------
 
-   .db "NES", $1a ;identification of the iNES header
-   .db PRG_COUNT ;number of 16KB PRG-ROM pages
-   .db $01 ;number of 8KB CHR-ROM pages
-   .db $00|MIRRORING ;mapper 0 and mirroring
-   .dsb 9, $00 ;clear the remaining bytes
+	.inesprg 1   ; 1x 16KB PRG code
+	.ineschr 1   ; 1x  8KB CHR data
+	.inesmap 0   ; mapper 0 = NROM, no bank swapping
+	.inesmir 1   ; background mirroring
 
 ;----------------------------------------------------------------
-; program bank(s)
+; PGR
 ;----------------------------------------------------------------
 
-   .base $10000-(PRG_COUNT*$4000)
+	 .org $C000
 
 vblankwait:    ; First wait for vblank to make sure PPU is ready
   BIT $2002
@@ -81,7 +65,7 @@ vblankwait:    ; First wait for vblank to make sure PPU is ready
   RTS
 
 Reset:
-  SEI          ; disable IRQs
+	SEI          ; disable IRQs
   CLD          ; disable decimal mode
   LDX #$40
   STX $4017    ; disable APU frame IRQ
@@ -94,7 +78,7 @@ Reset:
   JSR vblankwait
 
 clrmem:
-  LDA #$00
+	LDA #$00
   STA $0000, x
   STA $0100, x
   STA $0200, x
@@ -106,41 +90,35 @@ clrmem:
   STA $0300, x
   INX
   BNE clrmem
-   
   JSR vblankwait
 
-
 LoadPalettes:
-  LDA $2002             ; read PPU status to reset the high/low latch
+	LDA $2002             ; read PPU status to reset the high/low latch
   LDA #$3F
   STA $2006             ; write the high byte of $3F00 address
   LDA #$00
   STA $2006             ; write the low byte of $3F00 address
   LDX #$00              ; start out at 0
 LoadPalettesLoop:
-  LDA palette, x        ; load data from address (palette + the value in x)
-                          ; 1st time through loop it will load palette+0
-                          ; 2nd time through loop it will load palette+1
-                          ; 3rd time through loop it will load palette+2
-                          ; etc
+	LDA palette, x        ; load data from address (palette + the value in x)
   STA $2007             ; write to PPU
-  INX                   ; X = X + 1
+  INX
   CPX #$20              ; Compare X to hex $10, decimal 16 - copying 16 bytes = 4 sprites
   BNE LoadPalettesLoop  ; Branch to LoadPalettesLoop if compare was Not Equal to zero
-                        ; if compare was equal to 32, keep going down
+						; if compare was equal to 32, keep going down
 
 LoadSprites:
-  LDX #$00              ; start at 0
+	LDX #$00              ; start at 0
 LoadSpritesLoop:
-  LDA sprites, x        ; load data from address (sprites +  x)
+	LDA sprites, x        ; load data from address (sprites +  x)
   STA $0200, x          ; store into RAM address ($0200 + x)
   INX                   ; X = X + 1
   CPX #$20              ; Compare X to hex $20, decimal 32
   BNE LoadSpritesLoop   ; Branch to LoadSpritesLoop if compare was Not Equal to zero
-                        ; if compare was equal to 32, keep going down
+						; if compare was equal to 32, keep going down
 
 LoadBackground:
-  LDA $2002             ; read PPU status to reset the high/low latch
+	LDA $2002             ; read PPU status to reset the high/low latch
   LDA #$20
   STA $2006             ; write the high byte of $2000 address
   LDA #$00
@@ -150,39 +128,39 @@ LoadBackground:
   STA pointerLo       ; put the low byte of the address of background into pointer
   LDA >background
   STA pointerHi       ; put the high byte of the address into pointer
-  
+
   LDX #$00            ; start at pointer + 0
   LDY #$00
 OutsideLoop:
-  
-InsideLoop:
-  LDA (pointerLo), y  ; copy one background byte from address in pointer plus Y
+
+	InsideLoop:
+		LDA (pointerLo), y  ; copy one background byte from address in pointer plus Y
   STA $2007           ; this runs 256 * 4 times
-  
+
   INY                 ; inside loop counter
   CPY #$00
   BNE InsideLoop      ; run the inside loop 256 times before continuing down
-  
+
   INC pointerHi       ; low byte went 0 to 256, so high byte needs to be changed now
-  
+
   INX
   CPX #$04
   BNE OutsideLoop     ; run the outside loop 256 times before continuing down
 
 LoadAttribute:
-  LDA $2002             ; read PPU status to reset the high/low latch
+	LDA $2002             ; read PPU status to reset the high/low latch
   LDA #$23
   STA $2006             ; write the high byte of $23C0 address
   LDA #$C0
   STA $2006             ; write the low byte of $23C0 address
   LDX #$00              ; start out at 0
 LoadAttributeLoop:
-  LDA attribute, x      ; load data from address (attribute + the value in x)
+	LDA attribute, x      ; load data from address (attribute + the value in x)
   STA $2007             ; write to PPU
   INX                   ; X = X + 1
   CPX #$08              ; Compare X to hex $08, decimal 8 - copying 8 bytes
   BNE LoadAttributeLoop  ; Branch to LoadAttributeLoop if compare was Not Equal to zero
-                        ; if compare was equal to 128, keep going down
+						; if compare was equal to 128, keep going down
 
 ;;;Set some initial ball stats
   LDA #$00
@@ -190,10 +168,10 @@ LoadAttributeLoop:
   STA toolydown
   STA toolyleft
   STA toolyright
-  
+
   LDA #$20
   STA toolyy
-  
+
   LDA #$20
   STA toolyx
 
@@ -225,12 +203,12 @@ LoadAttributeLoop:
 
 
 Forever:
-  JMP Forever     ;jump back to Forever, infinite loop
-  
- 
+	JMP Forever     ;jump back to Forever, infinite loop
+
+
 
 NMI:
-  LDA #$00
+	LDA #$00
   STA $2003       ; set the low byte (00) of the RAM address
   LDA #$02
   STA $4014       ; set the high byte (02) of the RAM address, start the transfer
@@ -250,28 +228,28 @@ NMI:
 
   JSR ReadController  ;;get the current button data for player 1
 
-GameEngine:  
-  LDA gamestate
+GameEngine:
+	LDA gamestate
   CMP #STATETITLE
   BEQ EngineTitle    ;;game is displaying title screen
-    
+
   LDA gamestate
   CMP #STATEGAMEOVER
   BEQ EngineGameOver  ;;game is displaying ending screen
-  
+
   LDA gamestate
   CMP #STATEPLAYING
   BEQ EnginePlaying   ;;game is playing
-GameEngineDone:  
-  
-  JSR UpdateSprites  ;;set ball/paddle sprites from positions
+GameEngineDone:
+
+	JSR UpdateSprites  ;;set ball/paddle sprites from positions
 
   RTI             ; return from interrupt
 
 ;;;;;;;;
- 
+
 EngineTitle:
-  ;;if start button pressed
+	;;if start button pressed
   ;;  turn screen off
   ;;  load game screen
   ;;  set starting paddle/ball position
@@ -279,53 +257,53 @@ EngineTitle:
   ;;  turn screen on
   JMP GameEngineDone
 
-;;;;;;;;; 
- 
+;;;;;;;;;
+
 EngineGameOver:
-  ;;if start button pressed
+	;;if start button pressed
   ;;  turn screen off
   ;;  load title screen
   ;;  go to Title State
-  ;;  turn screen on 
+  ;;  turn screen on
   JMP GameEngineDone
- 
+
 ;;;;;;;;;;;
- 
+
 EnginePlaying:
 
-MoveToolyRight:
+	MoveToolyRight:
   LDA toolyright
   BEQ MoveToolyRightDone   ;;if toolyright=0, skip this section
 
 MoveToolyRightDone:
 
 
-MoveToolyLeft:
-  LDA toolyleft
+	MoveToolyLeft:
+		LDA toolyleft
   BEQ MoveToolyLeftDone   ;;if ballleft=0, skip this section
 
 MoveToolyLeftDone:
 
 
-MoveToolyUp:
-  LDA toolyup
+	MoveToolyUp:
+		LDA toolyup
   BEQ MoveToolyUpDone   ;;if ballup=0, skip this section
 
 MoveToolyUpDone:
 
 
-MoveToolyDown:
-  LDA toolydown
+	MoveToolyDown:
+		LDA toolydown
   BEQ MoveToolyDownDone   ;;if ballup=0, skip this section
 
 MoveToolyDownDone:
 
 
-MovePlayerUp:
-  LDA buttons
+	MovePlayerUp:
+		LDA buttons
   AND #%00001000
   BEQ MovePlayerUpDone
-    
+
   LDA playery
   SBC #$01
   STA playery
@@ -336,8 +314,8 @@ MovePlayerUp:
 MovePlayerUpDone:
 
 
-MovePlayerDown:
-  LDA buttons
+	MovePlayerDown:
+		LDA buttons
   AND #%00000100
   BEQ MovePlayerDownDone
 
@@ -350,11 +328,11 @@ MovePlayerDown:
 MovePlayerDownDone:
 
 
-MovePlayerLeft:
-  LDA buttons
+	MovePlayerLeft:
+		LDA buttons
   AND #%00000010
   BEQ MovePlayerLeftDone
-    
+
   LDA playerx
   SBC #$01
   STA playerx
@@ -364,11 +342,11 @@ MovePlayerLeft:
   ;;    move paddle top and bottom up
 MovePlayerLeftDone:
 
-MovePlayerRight:
-  LDA buttons
+	MovePlayerRight:
+		LDA buttons
   AND #%00000001
   BEQ MovePlayerRightDone
-    
+
   LDA playerx
   ADC #$01
   STA playerx
@@ -376,20 +354,20 @@ MovePlayerRight:
   ;;  if paddle bottom < bottom wall
   ;;    move paddle top and bottom down
 MovePlayerRightDone:
-  
 
-CheckCollision:
-  ;;if ball x < paddle1x
+
+	CheckCollision:
+		;;if ball x < paddle1x
   ;;  if ball y > paddle y top
   ;;    if ball y < paddle y bottom
   ;;      bounce, ball now moving left
 CheckCollisionDone:
 
-  JMP GameEngineDone
- 
- 
+	JMP GameEngineDone
+
+
 UpdateSprites:
-  ;; Player
+	;; Player
   LDA playery
   STA $0200
   STA $0204
@@ -397,19 +375,19 @@ UpdateSprites:
   ADC #$04
   STA $0208
   STA $020C
-  
+
   ;LDA player_tile_1
   ;STA $0201
   ;STA $0205
   ;STA $0209
   ;STA $020D
-  
+
   ;LDA #$00
   ;STA $0202
   ;STA $0206
   ;STA $020A
   ;STA $020E
-  
+
   LDA playerx
   STA $0203
   STA $020B
@@ -439,15 +417,15 @@ UpdateSprites:
 
   ;;update tooly sprites
   RTS
- 
- 
+
+
 DrawScore:
-  LDA $2002
+	LDA $2002
   LDA #$20
   STA $2006
   LDA #$20
   STA $2006          ; start drawing the score at PPU $2020
-  
+
   LDA scoreHundreds  ; get first digit
 ;  CLC
 ;  ADC #$30           ; add ascii offset  (this is UNUSED because the tiles for digits start at 0)
@@ -461,57 +439,57 @@ DrawScore:
 ;  ADC #$30           ; add ascii offset
   STA $2007
   RTS
- 
- 
+
+
 IncrementScore:
-IncOnes:
-  LDA scoreOnes      ; load the lowest digit of the number
-  CLC 
+	IncOnes:
+		LDA scoreOnes      ; load the lowest digit of the number
+  CLC
   ADC #$01           ; add one
   STA scoreOnes
   CMP #$0A           ; check if it overflowed, now equals 10
   BNE IncDone        ; if there was no overflow, all done
 IncTens:
-  LDA #$00
+	LDA #$00
   STA scoreOnes      ; wrap digit to 0
   LDA scoreTens      ; load the next digit
-  CLC 
+  CLC
   ADC #$01           ; add one, the carry from previous digit
   STA scoreTens
   CMP #$0A           ; check if it overflowed, now equals 10
   BNE IncDone        ; if there was no overflow, all done
 IncHundreds:
-  LDA #$00
+	LDA #$00
   STA scoreTens      ; wrap digit to 0
   LDA scoreHundreds  ; load the next digit
-  CLC 
+  CLC
   ADC #$01           ; add one, the carry from previous digit
   STA scoreHundreds
 IncDone:
- 
- 
 
-ReadController:
-  LDA #$01
+
+
+	ReadController:
+		LDA #$01
   STA $4016
   LDA #$00
   STA $4016
   LDX #$08
 ReadControllerLoop:
-  LDA $4016
+	LDA $4016
   LSR A            ; bit0 -> Carry
   ROL buttons      ; bit0 <- Carry
   DEX
   BNE ReadControllerLoop
   RTS
-  
 
-        
-;;;;;;;;;;;;;;  
+
+
+;;;;;;;;;;;;;;
 
 IRQ:
 
-   ;NOTE: IRQ code goes here
+	;NOTE: IRQ code goes here
 
 ;----------------------------------------------------------------
 ; interrupt vectors
@@ -519,24 +497,24 @@ IRQ:
 
 .org $E000
 palette:
-  .db $22,$29,$1A,$0F,  $22,$36,$17,$0F,  $22,$30,$21,$0F,  $22,$27,$17,$0F   ;;background palette
+	.db $22,$29,$1A,$0F,  $22,$36,$17,$0F,  $22,$30,$21,$0F,  $22,$27,$17,$0F   ;;background palette
   .db $22,$1C,$15,$14,  $22,$02,$38,$3C,  $22,$1C,$15,$14,  $22,$02,$38,$3C   ;;sprite palette
 
 sprites:
-     ;vert tile attr horiz
+	;vert tile attr horiz
   .db $80, $32, $00, $80   ;sprite 0
   .db $80, $33, $00, $88   ;sprite 1
   .db $88, $34, $00, $80   ;sprite 2
   .db $88, $35, $00, $88   ;sprite 3
 
-       ;vert tile attr horiz
+	   ;vert tile attr horiz
   .db $80, $32, $00, $80   ;sprite 4
   .db $80, $33, $00, $88   ;sprite 5
   .db $88, $34, $00, $80   ;sprite 6
   .db $88, $35, $00, $88   ;sprite 7
 
 background:
-  .db $24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24  ;;row 1
+	.db $24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24  ;;row 1
   .db $24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24  ;;all sky
 
   .db $24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24  ;;row 2
@@ -627,7 +605,7 @@ background:
   .db $24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24  ;;all sky
 
 attribute:
-  .db %00000000, %00010000, %01010000, %00010000, %00000000, %00000000, %00000000, %00110000
+	.db %00000000, %00010000, %01010000, %00010000, %00000000, %00000000, %00000000, %00110000
   .db %00000000, %00010000, %01010000, %00010000, %00000000, %00000000, %00000000, %00110000
   .db %00000000, %00010000, %01010000, %00010000, %00000000, %00000000, %00000000, %00110000
   .db %00000000, %00010000, %01010000, %00010000, %00000000, %00000000, %00000000, %00110000
@@ -636,23 +614,22 @@ attribute:
   .db %00000000, %00010000, %01010000, %00010000, %00000000, %00000000, %00000000, %00110000
   .db %00000000, %00010000, %01010000, %00010000, %00000000, %00000000, %00000000, %00110000
 
-
-  .db $24,$24,$24,$24, $47,$47,$24,$24 
-  .db $47,$47,$47,$47, $47,$47,$24,$24 
+  .db $24,$24,$24,$24, $47,$47,$24,$24
+  .db $47,$47,$47,$47, $47,$47,$24,$24
   .db $24,$24,$24,$24 ,$24,$24,$24,$24
   .db $24,$24,$24,$24, $55,$56,$24,$24  ;;brick bottoms
-  .db $47,$47,$47,$47, $47,$47,$24,$24 
-  .db $24,$24,$24,$24 ,$24,$24,$24,$24
-  .db $24,$24,$24,$24, $55,$56,$24,$24 
+  .db $47,$47,$47,$47, $47,$47,$24,$24
+	.db $24,$24,$24,$24 ,$24,$24,$24,$24
+  .db $24,$24,$24,$24, $55,$56,$24,$24
 
-   .org $fffa
+  .org $fffa
 
-   .dw NMI
-   .dw Reset
-   .dw IRQ
+  .dw NMI
+  .dw Reset
+	.dw IRQ
 
 ;----------------------------------------------------------------
-; CHR-ROM bank
+; CHR-ROM
 ;----------------------------------------------------------------
 
-   .incbin "mario.chr"
+  .incbin "mario.chr"
