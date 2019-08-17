@@ -5,11 +5,38 @@
 PRG_COUNT = 1 ;1 = 16KB, 2 = 32KB
 MIRRORING = %0001 ;%0000 = horizontal, %0001 = vertical, %1000 = four-screen
 
+STATETITLE     = $00  ; displaying title screen
+STATEPLAYING   = $01  ; move paddles/ball, check for collisions
+STATEGAMEOVER  = $02  ; displaying game over screen
+  
+RIGHTWALL      = $F4  ; when ball reaches one of these, do something
+TOPWALL        = $20
+BOTTOMWALL     = $E0
+LEFTWALL       = $04
+  
+PADDLE1X       = $08  ; horizontal position for paddles, doesnt move
+PADDLE2X       = $F0
 ;----------------------------------------------------------------
 ; variables
 ;----------------------------------------------------------------
 
    .enum $0000
+
+  gamestate       .dsb 1
+  ballx           .dsb 1
+  bally           .dsb 1
+  ballup          .dsb 1
+  balldown        .dsb 1
+  ballleft        .dsb 1
+  ballright       .dsb 1
+  ballspeedx      .dsb 1
+  ballspeedy      .dsb 1
+  paddle1ytop     .dsb 1
+  paddle2ybot     .dsb 1
+  buttons1        .dsb 1
+  buttons2        .dsb 1
+  score1          .dsb 1
+  score2          .dsb 1
 
    ;NOTE: declare variables using the DSB and DSW directives, like this:
 
@@ -42,6 +69,11 @@ MIRRORING = %0001 ;%0000 = horizontal, %0001 = vertical, %1000 = four-screen
 
    .base $10000-(PRG_COUNT*$4000)
 
+vblankwait:    ; First wait for vblank to make sure PPU is ready
+  BIT $2002
+  BPL vblankwait
+  RTS
+
 Reset:
   SEI          ; disable IRQs
   CLD          ; disable decimal mode
@@ -53,10 +85,7 @@ Reset:
   STX $2000    ; disable NMI
   STX $2001    ; disable rendering
   STX $4010    ; disable DMC IRQs
-
-vblankwait1:       ; First wait for vblank to make sure PPU is ready
-  BIT $2002
-  BPL vblankwait1
+  JSR vblankwait
 
 clrmem:
   LDA #$00
@@ -72,9 +101,7 @@ clrmem:
   INX
   BNE clrmem
    
-vblankwait2:      ; Second wait for vblank, PPU is ready after this
-  BIT $2002
-  BPL vblankwait2
+  JSR vblankwait
 
 
 LoadPalettes:
@@ -123,20 +150,44 @@ LoadBackgroundLoop:
   BNE LoadBackgroundLoop  ; Branch to LoadBackgroundLoop if compare was Not Equal to zero
                         ; if compare was equal to 128, keep going down
                   
-LoadAttribute:
-  LDA $2002             ; read PPU status to reset the high/low latch
-  LDA #$23
-  STA $2006             ; write the high byte of $23C0 address
-  LDA #$C0
-  STA $2006             ; write the low byte of $23C0 address
-  LDX #$00              ; start out at 0
-LoadAttributeLoop:
-  LDA attribute, x      ; load data from address (attribute + the value in x)
-  STA $2007             ; write to PPU
-  INX                   ; X = X + 1
-  CPX #$08              ; Compare X to hex $08, decimal 8 - copying 8 bytes
-  BNE LoadAttributeLoop  ; Branch to LoadAttributeLoop if compare was Not Equal to zero
+;LoadAttribute:
+;  LDA $2002             ; read PPU status to reset the high/low latch
+;  LDA #$23
+;  STA $2006             ; write the high byte of $23C0 address
+;  LDA #$C0
+;  STA $2006             ; write the low byte of $23C0 address
+;  LDX #$00              ; start out at 0
+;LoadAttributeLoop:
+;  LDA attribute, x      ; load data from address (attribute + the value in x)
+;  STA $2007             ; write to PPU
+;  INX                   ; X = X + 1
+;  CPX #$08              ; Compare X to hex $08, decimal 8 - copying 8 bytes
+;  BNE LoadAttributeLoop  ; Branch to LoadAttributeLoop if compare was Not Equal to zero
                         ; if compare was equal to 128, keep going down
+
+;;;Set some initial ball stats
+  LDA #$01
+  STA balldown
+  STA ballright
+  LDA #$00
+  STA ballup
+  STA ballleft
+  
+  LDA #$50
+  STA bally
+  
+  LDA #$80
+  STA ballx
+  
+  LDA #$02
+  STA ballspeedx
+  STA ballspeedy
+
+
+;;:Set starting game state
+  LDA #STATEPLAYING
+  STA gamestate
+
 
   LDA #%10010000   ; enable NMI, sprites from Pattern Table 0, background from Pattern Table 1
   STA $2000
@@ -156,89 +207,207 @@ NMI:
   LDA #$02
   STA $4014       ; set the high byte (02) of the RAM address, start the transfer
 
+  JSR DrawScore
 
-LatchController:
-  LDA #$01
-  STA $4016
-  LDA #$00
-  STA $4016       ; tell both the controllers to latch buttons
-
-
-ReadA: 
-  LDA $4016       ; player 1 - A
-  AND #%00000001  ; only look at bit 0
-  BEQ ReadADone   ; branch to ReadADone if button is NOT pressed (0)
-                  ; add instructions here to do something when button IS pressed (1)
-
-                  ; sprint 0
-  LDA $0203       ; load sprite X position
-  CLC             ; make sure the carry flag is clear
-  ADC #$01        ; A = A + 1
-  STA $0203       ; save sprite X position
-
-                  ; sprite 1
-  LDA $0207       ; load sprite X position
-  CLC             ; make sure the carry flag is clear
-  ADC #$01        ; A = A + 1
-  STA $0207       ; save sprite X position
-
-                  ; sprite 2
-  LDA $020B       ; load sprite X position
-  CLC             ; make sure the carry flag is clear
-  ADC #$01        ; A = A + 1
-  STA $020B       ; save sprite X position
-
-                  ; sprite 3
-  LDA $020F       ; load sprite X position
-  CLC             ; make sure the carry flag is clear
-  ADC #$01        ; A = A + 1
-  STA $020F       ; save sprite X position
-ReadADone:        ; handling this button is done
-  
-
-ReadB: 
-  LDA $4016       ; player 1 - B
-  AND #%00000001  ; only look at bit 0
-  BEQ ReadBDone   ; branch to ReadBDone if button is NOT pressed (0)
-                  ; add instructions here to do something when button IS pressed (1)
-  
-                  ; sprite 0
-  LDA $0203       ; load sprite X position
-  SEC             ; make sure carry flag is set
-  SBC #$01        ; A = A - 1
-  STA $0203       ; save sprite X position
-
-                  ; sprite 1
-  LDA $0207       ; load sprite X position
-  SEC             ; make sure carry flag is set
-  SBC #$01        ; A = A - 1
-  STA $0207       ; save sprite X position
-
-                  ; sprite 2
-  LDA $020B       ; load sprite X position
-  SEC             ; make sure carry flag is set
-  SBC #$01        ; A = A - 1
-  STA $020B       ; save sprite X position
-
-                  ; sprite 3
-  LDA $020F       ; load sprite X position
-  SEC             ; make sure carry flag is set
-  SBC #$01        ; A = A - 1
-  STA $020F       ; save sprite X position  
-ReadBDone:        ; handling this button is done
-
-  ;This is the PPU clean up section, so rendering the next frame starts properly.
+  ;;This is the PPU clean up section, so rendering the next frame starts properly.
   LDA #%10010000   ; enable NMI, sprites from Pattern Table 0, background from Pattern Table 1
   STA $2000
   LDA #%00011110   ; enable sprites, enable background, no clipping on left side
   STA $2001
-  LDA #$00         ;tell the ppu there is no background scrolling
+  LDA #$00        ;;tell the ppu there is no background scrolling
   STA $2005
   STA $2005
 
-  RTI              ; return from interrupt
+  ;;;all graphics updates done by here, run game engine
 
-   ;NOTE: NMI code goes here
+  JSR ReadController  ;;get the current button data for player 1
+
+GameEngine:  
+  LDA gamestate
+  CMP #STATETITLE
+  BEQ EngineTitle    ;;game is displaying title screen
+    
+  LDA gamestate
+  CMP #STATEGAMEOVER
+  BEQ EngineGameOver  ;;game is displaying ending screen
+  
+  LDA gamestate
+  CMP #STATEPLAYING
+  BEQ EnginePlaying   ;;game is playing
+GameEngineDone:  
+  
+  JSR UpdateSprites  ;;set ball/paddle sprites from positions
+
+  RTI             ; return from interrupt
+
+;;;;;;;;
+ 
+EngineTitle:
+  ;;if start button pressed
+  ;;  turn screen off
+  ;;  load game screen
+  ;;  set starting paddle/ball position
+  ;;  go to Playing State
+  ;;  turn screen on
+  JMP GameEngineDone
+
+;;;;;;;;; 
+ 
+EngineGameOver:
+  ;;if start button pressed
+  ;;  turn screen off
+  ;;  load title screen
+  ;;  go to Title State
+  ;;  turn screen on 
+  JMP GameEngineDone
+ 
+;;;;;;;;;;;
+ 
+EnginePlaying:
+
+MoveBallRight:
+  LDA ballright
+  BEQ MoveBallRightDone   ;;if ballright=0, skip this section
+
+  LDA ballx
+  CLC
+  ADC ballspeedx        ;;ballx position = ballx + ballspeedx
+  STA ballx
+
+  LDA ballx
+  CMP #RIGHTWALL
+  BCC MoveBallRightDone      ;;if ball x < right wall, still on screen, skip next section
+  LDA #$00
+  STA ballright
+  LDA #$01
+  STA ballleft         ;;bounce, ball now moving left
+  ;;in real game, give point to player 1, reset ball
+MoveBallRightDone:
+
+
+MoveBallLeft:
+  LDA ballleft
+  BEQ MoveBallLeftDone   ;;if ballleft=0, skip this section
+
+  LDA ballx
+  SEC
+  SBC ballspeedx        ;;ballx position = ballx - ballspeedx
+  STA ballx
+
+  LDA ballx
+  CMP #LEFTWALL
+  BCS MoveBallLeftDone      ;;if ball x > left wall, still on screen, skip next section
+  LDA #$01
+  STA ballright
+  LDA #$00
+  STA ballleft         ;;bounce, ball now moving right
+  ;;in real game, give point to player 2, reset ball
+MoveBallLeftDone:
+
+
+MoveBallUp:
+  LDA ballup
+  BEQ MoveBallUpDone   ;;if ballup=0, skip this section
+
+  LDA bally
+  SEC
+  SBC ballspeedy        ;;bally position = bally - ballspeedy
+  STA bally
+
+  LDA bally
+  CMP #TOPWALL
+  BCS MoveBallUpDone      ;;if ball y > top wall, still on screen, skip next section
+  LDA #$01
+  STA balldown
+  LDA #$00
+  STA ballup         ;;bounce, ball now moving down
+MoveBallUpDone:
+
+
+MoveBallDown:
+  LDA balldown
+  BEQ MoveBallDownDone   ;;if ballup=0, skip this section
+
+  LDA bally
+  CLC
+  ADC ballspeedy        ;;bally position = bally + ballspeedy
+  STA bally
+
+  LDA bally
+  CMP #BOTTOMWALL
+  BCC MoveBallDownDone      ;;if ball y < bottom wall, still on screen, skip next section
+  LDA #$00
+  STA balldown
+  LDA #$01
+  STA ballup         ;;bounce, ball now moving down
+MoveBallDownDone:
+
+MovePaddleUp:
+  ;;if up button pressed
+  ;;  if paddle top > top wall
+  ;;    move paddle top and bottom up
+MovePaddleUpDone:
+
+MovePaddleDown:
+  ;;if down button pressed
+  ;;  if paddle bottom < bottom wall
+  ;;    move paddle top and bottom down
+MovePaddleDownDone:
+  
+CheckPaddleCollision:
+  ;;if ball x < paddle1x
+  ;;  if ball y > paddle y top
+  ;;    if ball y < paddle y bottom
+  ;;      bounce, ball now moving left
+CheckPaddleCollisionDone:
+
+  JMP GameEngineDone
+ 
+ 
+ 
+ 
+UpdateSprites:
+  LDA bally  ;;update all ball sprite info
+  STA $0200
+  
+  LDA #$30
+  STA $0201
+  
+  LDA #$00
+  STA $0202
+  
+  LDA ballx
+  STA $0203
+  
+  ;;update paddle sprites
+  RTS
+ 
+ 
+DrawScore:
+  ;;draw score on screen using background tiles
+  ;;or using many sprites
+  RTS
+ 
+ 
+ 
+ReadController:
+  LDA #$01
+  STA $4016
+  LDA #$00
+  STA $4016
+  LDX #$08
+ReadControllerLoop:
+  LDA $4016
+  LSR A            ; bit0 -> Carry
+  ROL buttons1     ; bit0 <- Carry
+  DEX
+  BNE ReadControllerLoop
+  RTS
+  
+  
+    
+        
+;;;;;;;;;;;;;;  
 
 IRQ:
 
@@ -250,8 +419,8 @@ IRQ:
 
 .org $E000
 palette:
-  .db $0F,$31,$32,$33,$34,$35,$36,$37,$38,$39,$3A,$3B,$3C,$3D,$3E,$0F ; background palette
-  .db $0F,$1C,$15,$14,$31,$02,$38,$3C,$0F,$1C,$15,$14,$31,$02,$38,$3C ; sprite palette
+  .db $22,$29,$1A,$0F,  $22,$36,$17,$0F,  $22,$30,$21,$0F,  $22,$27,$17,$0F   ;;background palette
+  .db $22,$1C,$15,$14,  $22,$02,$38,$3C,  $22,$1C,$15,$14,  $22,$02,$38,$3C   ;;sprite palette
 
 sprites:
      ;vert tile attr horiz
