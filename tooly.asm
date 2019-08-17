@@ -23,20 +23,26 @@ PADDLE2X       = $F0
    .enum $0000
 
   gamestate       .dsb 1
-  ballx           .dsb 1
-  bally           .dsb 1
-  ballup          .dsb 1
-  balldown        .dsb 1
-  ballleft        .dsb 1
-  ballright       .dsb 1
-  ballspeedx      .dsb 1
-  ballspeedy      .dsb 1
-  paddle1ytop     .dsb 1
-  paddle2ybot     .dsb 1
-  buttons1        .dsb 1
-  buttons2        .dsb 1
-  score1          .dsb 1
-  score2          .dsb 1
+
+  toolyx          .dsb 1
+  toolyy          .dsb 1
+  toolyup         .dsb 1
+  toolydown       .dsb 1
+  toolyleft       .dsb 1
+  toolyright      .dsb 1
+  toolyspeed      .dsb 1
+
+  playerx         .dsb 1
+  playery         .dsb 1
+
+  buttons         .dsb 1
+  score           .dsb 1
+  pointerLo       .dsb 1   ; pointer variables are declared in RAM
+  pointerHi       .dsb 1   ; low byte first, high byte immediately after
+  scoreOnes       .dsb 1  ; byte for each digit in the decimal score
+  scoreTens       .dsb 1
+  scoreHundreds   .dsb 1
+
 
    ;NOTE: declare variables using the DSB and DSW directives, like this:
 
@@ -123,8 +129,6 @@ LoadPalettesLoop:
   BNE LoadPalettesLoop  ; Branch to LoadPalettesLoop if compare was Not Equal to zero
                         ; if compare was equal to 32, keep going down
 
-
-
 LoadSprites:
   LDX #$00              ; start at 0
 LoadSpritesLoop:
@@ -141,48 +145,72 @@ LoadBackground:
   STA $2006             ; write the high byte of $2000 address
   LDA #$00
   STA $2006             ; write the low byte of $2000 address
+
+  LDA #$00
+  STA pointerLo       ; put the low byte of the address of background into pointer
+  LDA >background
+  STA pointerHi       ; put the high byte of the address into pointer
+  
+  LDX #$00            ; start at pointer + 0
+  LDY #$00
+OutsideLoop:
+  
+InsideLoop:
+  LDA (pointerLo), y  ; copy one background byte from address in pointer plus Y
+  STA $2007           ; this runs 256 * 4 times
+  
+  INY                 ; inside loop counter
+  CPY #$00
+  BNE InsideLoop      ; run the inside loop 256 times before continuing down
+  
+  INC pointerHi       ; low byte went 0 to 256, so high byte needs to be changed now
+  
+  INX
+  CPX #$04
+  BNE OutsideLoop     ; run the outside loop 256 times before continuing down
+
+LoadAttribute:
+  LDA $2002             ; read PPU status to reset the high/low latch
+  LDA #$23
+  STA $2006             ; write the high byte of $23C0 address
+  LDA #$C0
+  STA $2006             ; write the low byte of $23C0 address
   LDX #$00              ; start out at 0
-LoadBackgroundLoop:
-  LDA background, x     ; load data from address (background + the value in x)
+LoadAttributeLoop:
+  LDA attribute, x      ; load data from address (attribute + the value in x)
   STA $2007             ; write to PPU
   INX                   ; X = X + 1
-  CPX #$80              ; Compare X to hex $80, decimal 128 - copying 128 bytes
-  BNE LoadBackgroundLoop  ; Branch to LoadBackgroundLoop if compare was Not Equal to zero
-                        ; if compare was equal to 128, keep going down
-                  
-;LoadAttribute:
-;  LDA $2002             ; read PPU status to reset the high/low latch
-;  LDA #$23
-;  STA $2006             ; write the high byte of $23C0 address
-;  LDA #$C0
-;  STA $2006             ; write the low byte of $23C0 address
-;  LDX #$00              ; start out at 0
-;LoadAttributeLoop:
-;  LDA attribute, x      ; load data from address (attribute + the value in x)
-;  STA $2007             ; write to PPU
-;  INX                   ; X = X + 1
-;  CPX #$08              ; Compare X to hex $08, decimal 8 - copying 8 bytes
-;  BNE LoadAttributeLoop  ; Branch to LoadAttributeLoop if compare was Not Equal to zero
+  CPX #$08              ; Compare X to hex $08, decimal 8 - copying 8 bytes
+  BNE LoadAttributeLoop  ; Branch to LoadAttributeLoop if compare was Not Equal to zero
                         ; if compare was equal to 128, keep going down
 
 ;;;Set some initial ball stats
-  LDA #$01
-  STA balldown
-  STA ballright
   LDA #$00
-  STA ballup
-  STA ballleft
+  STA toolyup
+  STA toolydown
+  STA toolyleft
+  STA toolyright
   
-  LDA #$50
-  STA bally
+  LDA #$20
+  STA toolyy
   
-  LDA #$80
-  STA ballx
-  
-  LDA #$02
-  STA ballspeedx
-  STA ballspeedy
+  LDA #$20
+  STA toolyx
 
+  LDA #$03
+  STA toolyspeed
+
+  LDA #$50
+  STA playery
+
+  LDA #$80
+  STA playerx
+
+;;;Set initial score value
+  LDA #$00
+  STA scoreOnes
+  STA scoreTens
+  STA scoreHundreds
 
 ;;:Set starting game state
   LDA #STATEPLAYING
@@ -265,131 +293,204 @@ EngineGameOver:
  
 EnginePlaying:
 
-MoveBallRight:
-  LDA ballright
-  BEQ MoveBallRightDone   ;;if ballright=0, skip this section
+MoveToolyRight:
+  LDA toolyright
+  BEQ MoveToolyRightDone   ;;if toolyright=0, skip this section
 
-  LDA ballx
-  CLC
-  ADC ballspeedx        ;;ballx position = ballx + ballspeedx
-  STA ballx
-
-  LDA ballx
-  CMP #RIGHTWALL
-  BCC MoveBallRightDone      ;;if ball x < right wall, still on screen, skip next section
-  LDA #$00
-  STA ballright
-  LDA #$01
-  STA ballleft         ;;bounce, ball now moving left
-  ;;in real game, give point to player 1, reset ball
-MoveBallRightDone:
+MoveToolyRightDone:
 
 
-MoveBallLeft:
-  LDA ballleft
-  BEQ MoveBallLeftDone   ;;if ballleft=0, skip this section
+MoveToolyLeft:
+  LDA toolyleft
+  BEQ MoveToolyLeftDone   ;;if ballleft=0, skip this section
 
-  LDA ballx
-  SEC
-  SBC ballspeedx        ;;ballx position = ballx - ballspeedx
-  STA ballx
-
-  LDA ballx
-  CMP #LEFTWALL
-  BCS MoveBallLeftDone      ;;if ball x > left wall, still on screen, skip next section
-  LDA #$01
-  STA ballright
-  LDA #$00
-  STA ballleft         ;;bounce, ball now moving right
-  ;;in real game, give point to player 2, reset ball
-MoveBallLeftDone:
+MoveToolyLeftDone:
 
 
-MoveBallUp:
-  LDA ballup
-  BEQ MoveBallUpDone   ;;if ballup=0, skip this section
+MoveToolyUp:
+  LDA toolyup
+  BEQ MoveToolyUpDone   ;;if ballup=0, skip this section
 
-  LDA bally
-  SEC
-  SBC ballspeedy        ;;bally position = bally - ballspeedy
-  STA bally
-
-  LDA bally
-  CMP #TOPWALL
-  BCS MoveBallUpDone      ;;if ball y > top wall, still on screen, skip next section
-  LDA #$01
-  STA balldown
-  LDA #$00
-  STA ballup         ;;bounce, ball now moving down
-MoveBallUpDone:
+MoveToolyUpDone:
 
 
-MoveBallDown:
-  LDA balldown
-  BEQ MoveBallDownDone   ;;if ballup=0, skip this section
+MoveToolyDown:
+  LDA toolydown
+  BEQ MoveToolyDownDone   ;;if ballup=0, skip this section
 
-  LDA bally
-  CLC
-  ADC ballspeedy        ;;bally position = bally + ballspeedy
-  STA bally
+MoveToolyDownDone:
 
-  LDA bally
-  CMP #BOTTOMWALL
-  BCC MoveBallDownDone      ;;if ball y < bottom wall, still on screen, skip next section
-  LDA #$00
-  STA balldown
-  LDA #$01
-  STA ballup         ;;bounce, ball now moving down
-MoveBallDownDone:
 
-MovePaddleUp:
+MovePlayerUp:
+  LDA buttons
+  AND #%00001000
+  BEQ MovePlayerUpDone
+    
+  LDA playery
+  SBC #$01
+  STA playery
+  JSR IncrementScore
   ;;if up button pressed
   ;;  if paddle top > top wall
   ;;    move paddle top and bottom up
-MovePaddleUpDone:
+MovePlayerUpDone:
 
-MovePaddleDown:
+
+MovePlayerDown:
+  LDA buttons
+  AND #%00000100
+  BEQ MovePlayerDownDone
+
+  LDA playery
+  ADC #$01
+  STA playery
   ;;if down button pressed
   ;;  if paddle bottom < bottom wall
   ;;    move paddle top and bottom down
-MovePaddleDownDone:
+MovePlayerDownDone:
+
+
+MovePlayerLeft:
+  LDA buttons
+  AND #%00000010
+  BEQ MovePlayerLeftDone
+    
+  LDA playerx
+  SBC #$01
+  STA playerx
+  ;; JSR IncrementScore
+  ;;if up button pressed
+  ;;  if paddle top > top wall
+  ;;    move paddle top and bottom up
+MovePlayerLeftDone:
+
+MovePlayerRight:
+  LDA buttons
+  AND #%00000001
+  BEQ MovePlayerRightDone
+    
+  LDA playerx
+  ADC #$01
+  STA playerx
+  ;;if down button pressed
+  ;;  if paddle bottom < bottom wall
+  ;;    move paddle top and bottom down
+MovePlayerRightDone:
   
-CheckPaddleCollision:
+
+CheckCollision:
   ;;if ball x < paddle1x
   ;;  if ball y > paddle y top
   ;;    if ball y < paddle y bottom
   ;;      bounce, ball now moving left
-CheckPaddleCollisionDone:
+CheckCollisionDone:
 
   JMP GameEngineDone
  
  
- 
- 
 UpdateSprites:
-  LDA bally  ;;update all ball sprite info
+  ;; Player
+  LDA playery
   STA $0200
+  STA $0204
+
+  ADC #$04
+  STA $0208
+  STA $020C
   
-  LDA #$30
-  STA $0201
+  ;LDA player_tile_1
+  ;STA $0201
+  ;STA $0205
+  ;STA $0209
+  ;STA $020D
   
-  LDA #$00
-  STA $0202
+  ;LDA #$00
+  ;STA $0202
+  ;STA $0206
+  ;STA $020A
+  ;STA $020E
   
-  LDA ballx
+  LDA playerx
   STA $0203
-  
-  ;;update paddle sprites
+  STA $020B
+
+  ADC #$04
+  STA $0207
+  STA $020F
+
+  ;; Tooly
+
+  LDA toolyy
+  STA $0210
+  STA $0214
+
+  ADC #$04
+  STA $0218
+  STA $021C
+
+  LDA toolyx
+  STA $0213
+  STA $021B
+
+  ADC #$04
+  STA $0217
+  STA $021F
+
+
+  ;;update tooly sprites
   RTS
  
  
 DrawScore:
-  ;;draw score on screen using background tiles
-  ;;or using many sprites
+  LDA $2002
+  LDA #$20
+  STA $2006
+  LDA #$20
+  STA $2006          ; start drawing the score at PPU $2020
+  
+  LDA scoreHundreds  ; get first digit
+;  CLC
+;  ADC #$30           ; add ascii offset  (this is UNUSED because the tiles for digits start at 0)
+  STA $2007          ; draw to background
+  LDA scoreTens      ; next digit
+;  CLC
+;  ADC #$30           ; add ascii offset
+  STA $2007
+  LDA scoreOnes      ; last digit
+;  CLC
+;  ADC #$30           ; add ascii offset
+  STA $2007
   RTS
  
  
+IncrementScore:
+IncOnes:
+  LDA scoreOnes      ; load the lowest digit of the number
+  CLC 
+  ADC #$01           ; add one
+  STA scoreOnes
+  CMP #$0A           ; check if it overflowed, now equals 10
+  BNE IncDone        ; if there was no overflow, all done
+IncTens:
+  LDA #$00
+  STA scoreOnes      ; wrap digit to 0
+  LDA scoreTens      ; load the next digit
+  CLC 
+  ADC #$01           ; add one, the carry from previous digit
+  STA scoreTens
+  CMP #$0A           ; check if it overflowed, now equals 10
+  BNE IncDone        ; if there was no overflow, all done
+IncHundreds:
+  LDA #$00
+  STA scoreTens      ; wrap digit to 0
+  LDA scoreHundreds  ; load the next digit
+  CLC 
+  ADC #$01           ; add one, the carry from previous digit
+  STA scoreHundreds
+IncDone:
  
+ 
+
 ReadController:
   LDA #$01
   STA $4016
@@ -399,13 +500,12 @@ ReadController:
 ReadControllerLoop:
   LDA $4016
   LSR A            ; bit0 -> Carry
-  ROL buttons1     ; bit0 <- Carry
+  ROL buttons      ; bit0 <- Carry
   DEX
   BNE ReadControllerLoop
   RTS
   
-  
-    
+
         
 ;;;;;;;;;;;;;;  
 
@@ -429,6 +529,12 @@ sprites:
   .db $88, $34, $00, $80   ;sprite 2
   .db $88, $35, $00, $88   ;sprite 3
 
+       ;vert tile attr horiz
+  .db $80, $32, $00, $80   ;sprite 4
+  .db $80, $33, $00, $88   ;sprite 5
+  .db $88, $34, $00, $80   ;sprite 6
+  .db $88, $35, $00, $88   ;sprite 7
+
 background:
   .db $24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24  ;;row 1
   .db $24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24  ;;all sky
@@ -442,9 +548,102 @@ background:
   .db $24,$24,$24,$24,$47,$47,$24,$24,$47,$47,$47,$47,$47,$47,$24,$24  ;;row 4
   .db $24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$55,$56,$24,$24  ;;brick bottoms
 
+  .db $24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24  ;;row 5
+  .db $24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24  ;;all sky
+
+  .db $24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24  ;;row 6
+  .db $24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24  ;;all sky
+
+  .db $24,$24,$24,$24,$45,$45,$24,$24,$45,$45,$45,$45,$45,$45,$24,$24  ;;row 7
+  .db $24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$53,$54,$24,$24  ;;some brick tops
+
+  .db $24,$24,$24,$24,$47,$47,$24,$24,$47,$47,$47,$47,$47,$47,$24,$24  ;;row 8
+  .db $24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$55,$56,$24,$24  ;;brick bottoms
+
+  .db $24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24  ;;row 9
+  .db $24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24  ;;all sky
+
+  .db $24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24  ;;row 10
+  .db $24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24  ;;all sky
+
+  .db $24,$24,$24,$24,$45,$45,$24,$24,$45,$45,$45,$45,$45,$45,$24,$24  ;;row 11
+  .db $24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$53,$54,$24,$24  ;;some brick tops
+
+  .db $24,$24,$24,$24,$47,$47,$24,$24,$47,$47,$47,$47,$47,$47,$24,$24  ;;row 12
+  .db $24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$55,$56,$24,$24  ;;brick bottoms
+
+  .db $24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24  ;;row 13
+  .db $24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24  ;;all sky
+
+  .db $24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24  ;;row 14
+  .db $24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24  ;;all sky
+
+  .db $24,$24,$24,$24,$45,$45,$24,$24,$45,$45,$45,$45,$45,$45,$24,$24  ;;row 15
+  .db $24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$53,$54,$24,$24  ;;some brick tops
+
+  .db $24,$24,$24,$24,$47,$47,$24,$24,$47,$47,$47,$47,$47,$47,$24,$24  ;;row 16
+  .db $24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$55,$56,$24,$24  ;;brick bottoms
+
+  .db $24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24  ;;row 17
+  .db $24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24  ;;all sky
+
+  .db $24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24  ;;row 18
+  .db $24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24  ;;all sky
+
+  .db $24,$24,$24,$24,$45,$45,$24,$24,$45,$45,$45,$45,$45,$45,$24,$24  ;;row 19
+  .db $24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$53,$54,$24,$24  ;;some brick tops
+
+  .db $24,$24,$24,$24,$47,$47,$24,$24,$47,$47,$47,$47,$47,$47,$24,$24  ;;row 20
+  .db $24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$55,$56,$24,$24  ;;brick bottoms
+
+  .db $24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24  ;;row 21
+  .db $24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24  ;;all sky
+
+  .db $24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24  ;;row 22
+  .db $24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24  ;;all sky
+
+  .db $24,$24,$24,$24,$45,$45,$24,$24,$45,$45,$45,$45,$45,$45,$24,$24  ;;row 23
+  .db $24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$53,$54,$24,$24  ;;some brick tops
+
+  .db $24,$24,$24,$24,$47,$47,$24,$24,$47,$47,$47,$47,$47,$47,$24,$24  ;;row 24
+  .db $24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$55,$56,$24,$24  ;;brick bottoms
+
+  .db $24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24  ;;row 25
+  .db $24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24  ;;all sky
+
+  .db $24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24  ;;row 26
+  .db $24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24  ;;all sky
+
+  .db $24,$24,$24,$24,$45,$45,$24,$24,$45,$45,$45,$45,$45,$45,$24,$24  ;;row 27
+  .db $24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$53,$54,$24,$24  ;;some brick tops
+
+  .db $24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24  ;;row 28
+  .db $24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24  ;;all sky
+
+  .db $24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24  ;;row 29
+  .db $24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24  ;;all sky
+
+  .db $24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24  ;;row 30
+  .db $24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24  ;;all sky
+
 attribute:
   .db %00000000, %00010000, %01010000, %00010000, %00000000, %00000000, %00000000, %00110000
-  .db $24,$24,$24,$24, $47,$47,$24,$24 ,$47,$47,$47,$47, $47,$47,$24,$24 ,$24,$24,$24,$24 ,$24,$24,$24,$24, $24,$24,$24,$24, $55,$56,$24,$24  ;;brick bottoms
+  .db %00000000, %00010000, %01010000, %00010000, %00000000, %00000000, %00000000, %00110000
+  .db %00000000, %00010000, %01010000, %00010000, %00000000, %00000000, %00000000, %00110000
+  .db %00000000, %00010000, %01010000, %00010000, %00000000, %00000000, %00000000, %00110000
+  .db %00000000, %00010000, %01010000, %00010000, %00000000, %00000000, %00000000, %00110000
+  .db %00000000, %00010000, %01010000, %00010000, %00000000, %00000000, %00000000, %00110000
+  .db %00000000, %00010000, %01010000, %00010000, %00000000, %00000000, %00000000, %00110000
+  .db %00000000, %00010000, %01010000, %00010000, %00000000, %00000000, %00000000, %00110000
+
+
+  .db $24,$24,$24,$24, $47,$47,$24,$24 
+  .db $47,$47,$47,$47, $47,$47,$24,$24 
+  .db $24,$24,$24,$24 ,$24,$24,$24,$24
+  .db $24,$24,$24,$24, $55,$56,$24,$24  ;;brick bottoms
+  .db $47,$47,$47,$47, $47,$47,$24,$24 
+  .db $24,$24,$24,$24 ,$24,$24,$24,$24
+  .db $24,$24,$24,$24, $55,$56,$24,$24 
 
    .org $fffa
 
