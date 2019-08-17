@@ -1,6 +1,9 @@
 ;----------------------------------------------------------------
 ; constants
 ;----------------------------------------------------------------
+  PPUSTATUS      = $2002
+  PPUADDR        = $2006
+  PPUDATA        = $2007
 
 	STATETITLE     = $00  ; displaying title screen
 	STATEPLAYING   = $01  ; move paddles/ball, check for collisions
@@ -12,10 +15,18 @@
 	LEFTWALL       = $04
 
 ;----------------------------------------------------------------
-; variables
+; Variables
 ;----------------------------------------------------------------
 
-  .org $0010
+  .enum $0000
+
+  ; A pointer
+  pointer         .dsw 1
+
+  ; For function LoadToPPU
+  ppuaddrhigh     .dsb 1
+  ppuaddrlow      .dsb 1
+  datasize        .dsb 1
 
   gamestate       .dsb 1
 
@@ -34,15 +45,22 @@
   score           .dsb 1
   pointerLo       .dsb 1   ; pointer variables are declared in RAM
   pointerHi       .dsb 1   ; low byte first, high byte immediately after
-  scoreOnes       .dsb 1  ; byte for each digit in the decimal score
+  scoreOnes       .dsb 1   ; byte for each digit in the decimal score
   scoreTens       .dsb 1
   scoreHundreds   .dsb 1
 
+  .ende
 
-   ;NOTE: declare variables using the DSB and DSW directives, like this:
+;----------------------------------------------------------------
+; Macros
+;----------------------------------------------------------------
 
-   ;MyVariable0 .dsb 1
-   ;MyVariable1 .dsb 3
+  MACRO setPointer addr
+  LDA #<addr            ; Get Lowbyte of Address
+  STA pointer           ; Store in pointer
+  LDA #>addr            ; Get Hibyte of Address
+  STA pointer+1         ; Store in pointer+1
+  ENDM
 
 ;----------------------------------------------------------------
 ; iNES header
@@ -57,11 +75,26 @@
 ; PGR
 ;----------------------------------------------------------------
 
-	 .org $C000
+  .org $C000
 
 vblankwait:    ; First wait for vblank to make sure PPU is ready
   BIT $2002
   BPL vblankwait
+  RTS
+
+LoadToPPU:
+  LDA PPUSTATUS         ; read PPU status to reset the high/low latch
+  LDA ppuaddrhigh       ; write the high byte
+  STA PPUADDR
+  LDA ppuaddrlow        ; write the low byte
+  STA PPUADDR
+  LDY #$00              ; start out at 0
+LoadToPPULoop:
+  LDA (pointer), y      ; load data from address
+  STA PPUDATA           ; write to PPU
+  INY
+  CPY datasize
+  BNE LoadToPPULoop
   RTS
 
 Reset:
@@ -93,20 +126,16 @@ clrmem:
   JSR vblankwait
 
 LoadPalettes:
-	LDA $2002             ; read PPU status to reset the high/low latch
   LDA #$3F
-  STA $2006             ; write the high byte of $3F00 address
+  STA ppuaddrhigh
   LDA #$00
-  STA $2006             ; write the low byte of $3F00 address
-  LDX #$00              ; start out at 0
-LoadPalettesLoop:
-	LDA palette, x        ; load data from address (palette + the value in x)
-  STA $2007             ; write to PPU
-  INX
-  CPX #$20              ; Compare X to hex $10, decimal 16 - copying 16 bytes = 4 sprites
-  BNE LoadPalettesLoop  ; Branch to LoadPalettesLoop if compare was Not Equal to zero
-						; if compare was equal to 32, keep going down
+  STA ppuaddrlow
+  setPointer palette
+  LDA #$20
+  STA datasize
+  JSR LoadToPPU
 
+  ; $0200-$02FF	contains 256 bytes to be copied to OAM during next vertical blank
 LoadSprites:
 	LDX #$00              ; start at 0
 LoadSpritesLoop:
@@ -115,7 +144,6 @@ LoadSpritesLoop:
   INX                   ; X = X + 1
   CPX #$20              ; Compare X to hex $20, decimal 32
   BNE LoadSpritesLoop   ; Branch to LoadSpritesLoop if compare was Not Equal to zero
-						; if compare was equal to 32, keep going down
 
 LoadBackground:
 	LDA $2002             ; read PPU status to reset the high/low latch
@@ -483,35 +511,27 @@ ReadControllerLoop:
   BNE ReadControllerLoop
   RTS
 
-
-
-;;;;;;;;;;;;;;
-
-IRQ:
-
-	;NOTE: IRQ code goes here
-
 ;----------------------------------------------------------------
-; interrupt vectors
+; Data
 ;----------------------------------------------------------------
 
 .org $E000
 palette:
-	.db $22,$29,$1A,$0F,  $22,$36,$17,$0F,  $22,$30,$21,$0F,  $22,$27,$17,$0F   ;;background palette
-  .db $22,$1C,$15,$14,  $22,$02,$38,$3C,  $22,$1C,$15,$14,  $22,$02,$38,$3C   ;;sprite palette
+	.db $22,$29,$1A,$0F,  $22,$36,$17,$0F,  $22,$30,$21,$0F,  $22,$27,$17,$0F   ; background palette
+  .db $22,$1C,$15,$14,  $22,$02,$38,$3C,  $22,$1C,$15,$14,  $22,$02,$38,$3C   ; sprite palette
 
 sprites:
-	;vert tile attr horiz
-  .db $80, $32, $00, $80   ;sprite 0
-  .db $80, $33, $00, $88   ;sprite 1
-  .db $88, $34, $00, $80   ;sprite 2
-  .db $88, $35, $00, $88   ;sprite 3
+	   ;vert tile attr horiz
+  .db $80, $32, $00, $80   ; sprite 0
+  .db $80, $33, $00, $88   ; sprite 1
+  .db $88, $34, $00, $80   ; sprite 2
+  .db $88, $35, $00, $88   ; sprite 3
 
 	   ;vert tile attr horiz
-  .db $80, $32, $00, $80   ;sprite 4
-  .db $80, $33, $00, $88   ;sprite 5
-  .db $88, $34, $00, $80   ;sprite 6
-  .db $88, $35, $00, $88   ;sprite 7
+  .db $80, $32, $00, $80   ; sprite 4
+  .db $80, $33, $00, $88   ; sprite 5
+  .db $88, $34, $00, $80   ; sprite 6
+  .db $88, $35, $00, $88   ; sprite 7
 
 background:
 	.db $24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24  ;;row 1
@@ -621,6 +641,13 @@ attribute:
   .db $47,$47,$47,$47, $47,$47,$24,$24
 	.db $24,$24,$24,$24 ,$24,$24,$24,$24
   .db $24,$24,$24,$24, $55,$56,$24,$24
+
+;----------------------------------------------------------------
+; Interrupt vectors
+;----------------------------------------------------------------
+
+IRQ:
+  ; No IRQs
 
   .org $fffa
 

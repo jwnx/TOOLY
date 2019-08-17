@@ -4,6 +4,7 @@ A NES game
 ## NES References
 
 * [6502 Instruction Set](https://www.masswerk.at/6502/6502_instruction_set.html)
+* [Assembly directives](https://github.com/freem/asm6f/blob/master/readme-original.txt)
 * [APU](https://wiki.nesdev.com/w/index.php/APU#Pulse_.28.244000-4007.29)
 * [APU DMC](https://wiki.nesdev.com/w/index.php/APU_DMC)
 * [iNES](https://wiki.nesdev.com/w/index.php/INES)
