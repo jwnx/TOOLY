@@ -24,8 +24,6 @@
   pointer         .dsw 1
 
   ; For function LoadToPPU
-  ppuaddrhigh     .dsb 1
-  ppuaddrlow      .dsb 1
   datasize        .dsb 1
 
   gamestate       .dsb 1
@@ -56,10 +54,17 @@
 ;----------------------------------------------------------------
 
   MACRO setPointer addr
-  LDA #<addr            ; Get Lowbyte of Address
+  LDA #<addr            ; Get low byte of Address
   STA pointer           ; Store in pointer
-  LDA #>addr            ; Get Hibyte of Address
+  LDA #>addr            ; Get high byte of Address
   STA pointer+1         ; Store in pointer+1
+  ENDM
+
+  MACRO setPpuAddr addr
+  LDA #>addr            ; Get high byte of Address
+  STA PPUADDR
+  LDA #<addr            ; Get low byte of Address
+  STA PPUADDR
   ENDM
 
 ;----------------------------------------------------------------
@@ -83,11 +88,6 @@ vblankwait:    ; First wait for vblank to make sure PPU is ready
   RTS
 
 LoadToPPU:
-  LDA PPUSTATUS         ; read PPU status to reset the high/low latch
-  LDA ppuaddrhigh       ; write the high byte
-  STA PPUADDR
-  LDA ppuaddrlow        ; write the low byte
-  STA PPUADDR
   LDY #$00              ; start out at 0
 LoadToPPULoop:
   LDA (pointer), y      ; load data from address
@@ -126,10 +126,8 @@ clrmem:
   JSR vblankwait
 
 LoadPalettes:
-  LDA #$3F
-  STA ppuaddrhigh
-  LDA #$00
-  STA ppuaddrlow
+  LDA PPUSTATUS         ; read PPU status to reset the high/low latch
+  setPpuAddr #$3F00
   setPointer palette
   LDA #$20
   STA datasize
@@ -159,7 +157,7 @@ LoadBackground:
 OutsideLoop:
 
 	InsideLoop:
-		LDA (pointer), y  ; copy one background byte from address in pointer plus Y
+	LDA (pointer), y  ; copy one background byte from address in pointer plus Y
   STA $2007           ; this runs 256 * 4 times
 
   INY                 ; inside loop counter
