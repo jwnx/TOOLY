@@ -93,7 +93,7 @@ LoadToPPULoop:
   LDA (pointer), y      ; load data from address
   STA PPUDATA           ; write to PPU
   INY
-  CPY datasize
+  DEC datasize
   BNE LoadToPPULoop
   RTS
 
