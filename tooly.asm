@@ -152,24 +152,21 @@ LoadBackground:
   LDA #$00
   STA $2006             ; write the low byte of $2000 address
 
-  LDA #$00
-  STA pointerLo       ; put the low byte of the address of background into pointer
-  LDA >background
-  STA pointerHi       ; put the high byte of the address into pointer
+  setPointer background
 
   LDX #$00            ; start at pointer + 0
   LDY #$00
 OutsideLoop:
 
 	InsideLoop:
-		LDA (pointerLo), y  ; copy one background byte from address in pointer plus Y
+		LDA (pointer), y  ; copy one background byte from address in pointer plus Y
   STA $2007           ; this runs 256 * 4 times
 
   INY                 ; inside loop counter
   CPY #$00
   BNE InsideLoop      ; run the inside loop 256 times before continuing down
 
-  INC pointerHi       ; low byte went 0 to 256, so high byte needs to be changed now
+  INC pointer+1       ; low byte went 0 to 256, so high byte needs to be changed now
 
   INX
   CPX #$04
