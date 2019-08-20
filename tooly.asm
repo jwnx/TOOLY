@@ -181,10 +181,10 @@ LoadAttribute:
   LDA #$20
   STA toolyx
 
-  LDA #$FF
+  LDA #$40
   STA playery
 
-  LDA #$FF
+  LDA #$80
   STA playerx
 
   ; Set initial score value
@@ -277,19 +277,38 @@ MoveTooly:
   LDA playerx
   CMP toolyx
   BEQ MoveToolyXDone
+  JSR LoadToolyCoords
   BCC MoveToolyLeft
+  INC coordx
+  JSR CheckCollision
+  CMP #$01
+  BEQ MoveToolyXDone
   INC toolyx
   JMP MoveToolyXDone
 MoveToolyLeft:
+  DEC coordx
+  JSR CheckCollision
+  CMP #$01
+  BEQ MoveToolyXDone
   DEC toolyx
 MoveToolyXDone:
   LDA playery
   CMP toolyy
   BEQ MoveToolyYDone
+  JSR LoadToolyCoords
   BCC MoveToolyUp
+  INC coordy
+  JSR LoadToolyCoords
+  JSR CheckCollision
+  CMP #$01
+  BEQ MoveToolyYDone
   INC toolyy
   JMP MoveToolyYDone
 MoveToolyUp:
+  DEC coordy
+  JSR CheckCollision
+  CMP #$01
+  BEQ MoveToolyYDone
   DEC toolyy
 MoveToolyYDone:
 
@@ -348,33 +367,33 @@ MovePlayerRightDone:
 JMP GameEngineDone
 
   ; Convert pixels to blocks
-NormalizeCoord:
-  LSR A
-  LSR A
-  LSR A
+NormalizeCoords:
+  LSR coordx
+  LSR coordx
+  LSR coordx
+  LSR coordy
+  LSR coordy
+  LSR coordy
   RTS
 
 LoadPlayerCoords:
   LDA playerx
-  JSR NormalizeCoord
   STA coordx
   LDA playery
-  JSR NormalizeCoord
   STA coordy
   RTS
 
 LoadToolyCoords:
   LDA toolyx
-  JSR NormalizeCoord
   STA coordx
   LDA toolyy
-  JSR NormalizeCoord
   STA coordy
   RTS
 
   ; Takes in (coordx,coordy), returns Z = 1 if there's a collision
 CheckCollision:
   setPointer collision
+  JSR NormalizeCoords
   LDX #$00
   LDY #$00
 CheckCollisionLoop:
