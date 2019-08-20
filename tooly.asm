@@ -144,31 +144,18 @@ LoadSpritesLoop:
   BNE LoadSpritesLoop   ; Branch to LoadSpritesLoop if compare was Not Equal to zero
 
 LoadBackground:
-	LDA $2002             ; read PPU status to reset the high/low latch
-  LDA #$20
-  STA $2006             ; write the high byte of $2000 address
-  LDA #$00
-  STA $2006             ; write the low byte of $2000 address
-
+  LDA PPUSTATUS         ; read PPU status to reset the high/low latch
+  setPpuAddr #$2000
   setPointer background
-
-  LDX #$00            ; start at pointer + 0
-  LDY #$00
-OutsideLoop:
-
-	InsideLoop:
-	LDA (pointer), y  ; copy one background byte from address in pointer plus Y
-  STA $2007           ; this runs 256 * 4 times
-
-  INY                 ; inside loop counter
-  CPY #$00
-  BNE InsideLoop      ; run the inside loop 256 times before continuing down
-
-  INC pointer+1       ; low byte went 0 to 256, so high byte needs to be changed now
-
+  LDA #$00
+  STA datasize
+  LDX #$00
+LoadBackgroundLoop:
+  JSR LoadToPPU
+  INC pointer+1         ; low byte went 0 to 256, so high byte needs to be changed now
   INX
   CPX #$04
-  BNE OutsideLoop     ; run the outside loop 256 times before continuing down
+  BNE LoadBackgroundLoop
 
 LoadAttribute:
 	LDA $2002             ; read PPU status to reset the high/low latch
