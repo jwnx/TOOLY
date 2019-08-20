@@ -158,19 +158,12 @@ LoadBackgroundLoop:
   BNE LoadBackgroundLoop
 
 LoadAttribute:
-	LDA $2002             ; read PPU status to reset the high/low latch
-  LDA #$23
-  STA $2006             ; write the high byte of $23C0 address
-  LDA #$C0
-  STA $2006             ; write the low byte of $23C0 address
-  LDX #$00              ; start out at 0
-LoadAttributeLoop:
-	LDA attribute, x      ; load data from address (attribute + the value in x)
-  STA $2007             ; write to PPU
-  INX                   ; X = X + 1
-  CPX #$08              ; Compare X to hex $08, decimal 8 - copying 8 bytes
-  BNE LoadAttributeLoop  ; Branch to LoadAttributeLoop if compare was Not Equal to zero
-						; if compare was equal to 128, keep going down
+  LDA PPUSTATUS         ; read PPU status to reset the high/low latch
+  setPpuAddr #$23C0
+  setPointer attribute
+  LDA #$08
+  STA datasize
+  JSR LoadToPPU
 
 ;;;Set some initial ball stats
   LDA #$00
