@@ -13,13 +13,8 @@
   CTRL1          = $4016
 
 	STATETITLE     = $00  ; Displaying title screen
-	STATEPLAYING   = $01  ; Move paddles/ball, check for collisions
+	STATEPLAYING   = $01  ; Move player and tooly
 	STATEGAMEOVER  = $02  ; Displaying game over screen
-
-	RIGHTWALL      = $F4  ; When ball reaches one of these, do something
-	TOPWALL        = $20
-	BOTTOMWALL     = $E0
-	LEFTWALL       = $04
 
 ;----------------------------------------------------------------
 ; Variables
@@ -41,6 +36,7 @@
   ; Player state
   playerx         .dsb 1
   playery         .dsb 1
+  health          .dsb 1
 
   ; For function CheckCollision
   coordx          .dsb 1
@@ -174,18 +170,20 @@ LoadAttribute:
   STA datasize
   JSR LoadToPPU
 
-  ; Set initial state
+  ; Set initial positions
   LDA #$20
   STA toolyy
-
   LDA #$20
   STA toolyx
 
   LDA #$40
   STA playery
-
   LDA #$80
   STA playerx
+
+  ; Set initial health value
+  LDA #$64
+  STA health
 
   ; Set initial score value
   LDA #$00
@@ -230,87 +228,76 @@ NMI:
 GameEngine:
 	LDA gamestate
   CMP #STATETITLE
-  BEQ EngineTitle    ;;game is displaying title screen
+  BEQ EngineTitle
 
   LDA gamestate
   CMP #STATEGAMEOVER
-  BEQ EngineGameOver  ;;game is displaying ending screen
+  BEQ EngineGameOver
 
   LDA gamestate
   CMP #STATEPLAYING
-  BEQ EnginePlaying   ;;game is playing
+  BEQ EnginePlaying
 
 GameEngineDone:
-	JSR UpdateSprites  ;;set ball/paddle sprites from positions
-  RTI             ; return from interrupt
-
-;;;;;;;;
+	JSR UpdateSprites     ; Set sprites from positions
+  RTI
 
 EngineTitle:
-	;;if start button pressed
-  ;;  turn screen off
-  ;;  load game screen
-  ;;  set starting paddle/ball position
-  ;;  go to Playing State
-  ;;  turn screen on
   JMP GameEngineDone
-
-;;;;;;;;;
 
 EngineGameOver:
-	;;if start button pressed
-  ;;  turn screen off
-  ;;  load title screen
-  ;;  go to Title State
-  ;;  turn screen on
   JMP GameEngineDone
 
-;;;;;;;;;;;
-
 EnginePlaying:
+  JSR CheckHealthDown
 
 MoveTooly:
   LDA #$01
   EOR turn
   STA turn
-  BEQ MoveToolyYDone
+  BEQ MoveToolyDone
+
+MoveToolyX:
   LDA playerx
   CMP toolyx
-  BEQ MoveToolyXDone
+  BEQ MoveToolyY
   JSR LoadToolyCoords
   BCC MoveToolyLeft
+MoveToolyRight:
   INC coordx
   JSR CheckCollision
   CMP #$01
-  BEQ MoveToolyXDone
+  BEQ MoveToolyY
   INC toolyx
-  JMP MoveToolyXDone
+  JMP MoveToolyY
 MoveToolyLeft:
   DEC coordx
   JSR CheckCollision
   CMP #$01
-  BEQ MoveToolyXDone
+  BEQ MoveToolyY
   DEC toolyx
-MoveToolyXDone:
+
+MoveToolyY:
   LDA playery
   CMP toolyy
-  BEQ MoveToolyYDone
+  BEQ MoveToolyDone
   JSR LoadToolyCoords
   BCC MoveToolyUp
+MoveToolyDown:
   INC coordy
   JSR LoadToolyCoords
   JSR CheckCollision
   CMP #$01
-  BEQ MoveToolyYDone
+  BEQ MoveToolyDone
   INC toolyy
-  JMP MoveToolyYDone
+  JMP MoveToolyDone
 MoveToolyUp:
   DEC coordy
   JSR CheckCollision
   CMP #$01
-  BEQ MoveToolyYDone
+  BEQ MoveToolyDone
   DEC toolyy
-MoveToolyYDone:
+MoveToolyDone:
 
 MovePlayerUp:
 	LDA buttons
@@ -364,7 +351,31 @@ MovePlayerRight:
   INC playerx
 MovePlayerRightDone:
 
-JMP GameEngineDone
+  JSR CheckHealthUp
+
+  JMP GameEngineDone
+
+CheckHealthDown:
+  LDA playerx
+  CMP toolyx
+  BNE CheckHealthDownDone
+  LDA playery
+  CMP toolyy
+  BNE CheckHealthDownDone
+  DEC health
+  BNE CheckHealthDownDone
+  LDA #STATEGAMEOVER
+  STA gamestate
+  JMP GameEngineDone
+CheckHealthDownDone:
+  RTS
+
+CheckHealthUp:
+  setPointer waterandfood
+  JSR CheckOverlap
+  ADC health
+  STA health
+  RTS
 
   ; Convert pixels to blocks
 NormalizeCoords:
@@ -390,9 +401,12 @@ LoadToolyCoords:
   STA coordy
   RTS
 
-  ; Takes in (coordx,coordy), returns Z = 1 if there's a collision
 CheckCollision:
   setPointer collision
+  JMP CheckOverlap
+
+  ; Takes in (coordx,coordy), returns Z = 1 if there's a collision
+CheckOverlap:
   JSR NormalizeCoords
   LDX #$00
   LDY #$00
@@ -673,6 +687,9 @@ collision: ; (x,y) coordinates, from (0,0) to (1F,1D)
   .dw $1E10,$1E11,$1E12,$1E13,$1E14,$1E15,$1E16,$1E17,$1E18,$1E19,$1E1A,$1E1B,$1E1C,$1E1D
   ; Pad to become multiple of 256
   .dsb 8
+
+waterandfood:
+  .dsb 256
 
 ;----------------------------------------------------------------
 ; Interrupt vectors
