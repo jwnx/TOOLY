@@ -33,21 +33,28 @@
   ; For function LoadToPPU
   datasize        .dsb 1
 
-  gamestate       .dsb 1
-
+  ; Tooly state
   turn            .dsb 1
-
   toolyx          .dsb 1
   toolyy          .dsb 1
 
+  ; Player state
   playerx         .dsb 1
   playery         .dsb 1
 
-  buttons         .dsb 1
+  ; For function CheckCollision
+  coordx          .dsb 1
+  coordy          .dsb 1
+
+  ; Score
   score           .dsb 1
   scoreOnes       .dsb 1   ; Byte for each digit in the decimal score
   scoreTens       .dsb 1
   scoreHundreds   .dsb 1
+
+  gamestate       .dsb 1
+
+  buttons         .dsb 1
 
   .ende
 
@@ -148,7 +155,7 @@ LoadSpritesLoop:
 LoadBackground:
   LDA PPUSTATUS         ; Read PPU status to reset the high/low latch
   setPpuAddr #$2000
-  setPointer background
+  setPointer background ; Low byte is 00
   LDA #$00
   STA datasize
   LDX #$00
@@ -174,10 +181,10 @@ LoadAttribute:
   LDA #$20
   STA toolyx
 
-  LDA #$50
+  LDA #$FF
   STA playery
 
-  LDA #$80
+  LDA #$FF
   STA playerx
 
   ; Set initial score value
@@ -291,52 +298,104 @@ MovePlayerUp:
   AND #%00001000
   BEQ MovePlayerUpDone
 
+  JSR LoadPlayerCoords
+  DEC coordy
+  JSR CheckCollision
+  CMP #$01
+  BEQ MovePlayerUpDone
   DEC playery
-  JSR IncrementScore
-  ;;if up button pressed
-  ;;  if paddle top > top wall
-  ;;    move paddle top and bottom up
 MovePlayerUpDone:
+
 MovePlayerDown:
 	LDA buttons
   AND #%00000100
   BEQ MovePlayerDownDone
 
+  JSR LoadPlayerCoords
+  INC coordy
+  JSR CheckCollision
+  CMP #$01
+  BEQ MovePlayerDownDone
   INC playery
-  ;;if down button pressed
-  ;;  if paddle bottom < bottom wall
-  ;;    move paddle top and bottom down
-
 MovePlayerDownDone:
+
 MovePlayerLeft:
 	LDA buttons
   AND #%00000010
   BEQ MovePlayerLeftDone
 
+  JSR LoadPlayerCoords
+  DEC coordx
+  JSR CheckCollision
+  CMP #$01
+  BEQ MovePlayerLeftDone
   DEC playerx
-  ;; JSR IncrementScore
-  ;;if up button pressed
-  ;;  if paddle top > top wall
-  ;;    move paddle top and bottom up
-
 MovePlayerLeftDone:
+
 MovePlayerRight:
 	LDA buttons
   AND #%00000001
   BEQ MovePlayerRightDone
 
+  JSR LoadPlayerCoords
+  INC coordx
+  JSR CheckCollision
+  CMP #$01
+  BEQ MovePlayerRightDone
   INC playerx
-  ;;if down button pressed
-  ;;  if paddle bottom < bottom wall
-  ;;    move paddle top and bottom down
 MovePlayerRightDone:
 
-		;;if ball x < paddle1x
-  ;;  if ball y > paddle y top
-  ;;    if ball y < paddle y bottom
-  ;;      bounce, ball now moving left
-
 JMP GameEngineDone
+
+  ; Convert pixels to blocks
+NormalizeCoord:
+  LSR A
+  LSR A
+  LSR A
+  RTS
+
+LoadPlayerCoords:
+  LDA playerx
+  JSR NormalizeCoord
+  STA coordx
+  LDA playery
+  JSR NormalizeCoord
+  STA coordy
+  RTS
+
+LoadToolyCoords:
+  LDA toolyx
+  JSR NormalizeCoord
+  STA coordx
+  LDA toolyy
+  JSR NormalizeCoord
+  STA coordy
+  RTS
+
+  ; Takes in (coordx,coordy), returns Z = 1 if there's a collision
+CheckCollision:
+  setPointer collision
+  LDX #$00
+  LDY #$00
+CheckCollisionLoop:
+  LDA (pointer), y
+  INY
+  CMP coordy
+  BNE Continue
+  LDA (pointer), y
+  CMP coordx
+  BNE Continue
+  LDA #$01
+  RTS
+Continue:
+  INY
+  BNE CheckCollisionLoop
+  INC pointer+1
+  INX
+  CPX #$01
+  BNE CheckCollisionLoop
+  LDA #$00
+  RTS
 
 UpdateSprites:
 	; Player
@@ -386,7 +445,6 @@ UpdateSprites:
   STA $0217
   STA $021F
 
-  ;;update tooly sprites
   RTS
 
 DrawScore:
@@ -580,6 +638,22 @@ attribute:
   .db $47,$47,$47,$47, $47,$47,$24,$24
 	.db $24,$24,$24,$24 ,$24,$24,$24,$24
   .db $24,$24,$24,$24, $55,$56,$24,$24
+
+collision: ; (x,y) coordinates, from (0,0) to (1F,1D)
+  ; Top
+  .dw $0000,$0100,$0200,$0300,$0400,$0500,$0600,$0700,$0800,$0900,$0a00,$0b00,$0c00,$0d00,$0e00,$0f00
+  .dw $1000,$1100,$1200,$1300,$1400,$1500,$1600,$1700,$1800,$1900,$1a00,$1b00,$1c00,$1d00,$1e00,$1f00
+  ; Bottom
+  .dw $001C,$011C,$021C,$031C,$041C,$051C,$061C,$071C,$081C,$091C,$0a1C,$0b1C,$0c1C,$0d1C,$0e1C,$0f1C
+  .dw $101C,$111C,$121C,$131C,$141C,$151C,$161C,$171C,$181C,$191C,$1a1C,$1b1C,$1c1C,$1d1C,$1e1C,$1f1C
+  ; Left
+  .dw $0000,$0001,$0002,$0003,$0004,$0005,$0006,$0007,$0008,$0009,$000A,$000B,$000C,$000D,$000E,$000F
+  .dw $0010,$0011,$0012,$0013,$0014,$0015,$0016,$0017,$0018,$0019,$001A,$001B,$001C,$001D
+  ; Right
+  .dw $1E00,$1E01,$1E02,$1E03,$1E04,$1E05,$1E06,$1E07,$1E08,$1E09,$1E0A,$1E0B,$1E0C,$1E0D,$1E0E,$1E0F
+  .dw $1E10,$1E11,$1E12,$1E13,$1E14,$1E15,$1E16,$1E17,$1E18,$1E19,$1E1A,$1E1B,$1E1C,$1E1D
+  ; Pad to become multiple of 256
+  .dsb 8
 
 ;----------------------------------------------------------------
 ; Interrupt vectors
