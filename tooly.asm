@@ -35,13 +35,10 @@
 
   gamestate       .dsb 1
 
+  turn            .dsb 1
+
   toolyx          .dsb 1
   toolyy          .dsb 1
-  toolyup         .dsb 1
-  toolydown       .dsb 1
-  toolyleft       .dsb 1
-  toolyright      .dsb 1
-  toolyspeed      .dsb 1
 
   playerx         .dsb 1
   playery         .dsb 1
@@ -170,21 +167,12 @@ LoadAttribute:
   STA datasize
   JSR LoadToPPU
 
-;;;Set some initial ball stats
-  LDA #$00
-  STA toolyup
-  STA toolydown
-  STA toolyleft
-  STA toolyright
-
+  ; Set initial state
   LDA #$20
   STA toolyy
 
   LDA #$20
   STA toolyx
-
-  LDA #$03
-  STA toolyspeed
 
   LDA #$50
   STA playery
@@ -192,16 +180,15 @@ LoadAttribute:
   LDA #$80
   STA playerx
 
-  ;Set initial score value
+  ; Set initial score value
   LDA #$00
   STA scoreOnes
   STA scoreTens
   STA scoreHundreds
 
-  ;Set starting game state
+  ; Set starting game state
   LDA #STATEPLAYING
   STA gamestate
-
 
   LDA #%10010000        ; Enable NMI, sprites from Pattern Table 0, background from Pattern Table 1
   STA $2000
@@ -274,34 +261,37 @@ EngineGameOver:
 ;;;;;;;;;;;
 
 EnginePlaying:
-MoveToolyRight:
-  LDA toolyright
-  BEQ MoveToolyRightDone   ;;if toolyright=0, skip this section
 
-MoveToolyRightDone:
+MoveTooly:
+  LDA #$01
+  EOR turn
+  STA turn
+  BEQ MoveToolyYDone
+  LDA playerx
+  CMP toolyx
+  BEQ MoveToolyXDone
+  BCC MoveToolyLeft
+  INC toolyx
+  JMP MoveToolyXDone
 MoveToolyLeft:
-	LDA toolyleft
-  BEQ MoveToolyLeftDone   ;;if ballleft=0, skip this section
-
-MoveToolyLeftDone:
+  DEC toolyx
+MoveToolyXDone:
+  LDA playery
+  CMP toolyy
+  BEQ MoveToolyYDone
+  BCC MoveToolyUp
+  INC toolyy
+  JMP MoveToolyYDone
 MoveToolyUp:
-	LDA toolyup
-  BEQ MoveToolyUpDone   ;;if ballup=0, skip this section
+  DEC toolyy
+MoveToolyYDone:
 
-MoveToolyUpDone:
-MoveToolyDown:
-	LDA toolydown
-  BEQ MoveToolyDownDone   ;;if ballup=0, skip this section
-
-MoveToolyDownDone:
 MovePlayerUp:
 	LDA buttons
   AND #%00001000
   BEQ MovePlayerUpDone
 
-  LDA playery
-  SBC #$01
-  STA playery
+  DEC playery
   JSR IncrementScore
   ;;if up button pressed
   ;;  if paddle top > top wall
@@ -312,9 +302,7 @@ MovePlayerDown:
   AND #%00000100
   BEQ MovePlayerDownDone
 
-  LDA playery
-  ADC #$01
-  STA playery
+  INC playery
   ;;if down button pressed
   ;;  if paddle bottom < bottom wall
   ;;    move paddle top and bottom down
@@ -325,9 +313,7 @@ MovePlayerLeft:
   AND #%00000010
   BEQ MovePlayerLeftDone
 
-  LDA playerx
-  SBC #$01
-  STA playerx
+  DEC playerx
   ;; JSR IncrementScore
   ;;if up button pressed
   ;;  if paddle top > top wall
@@ -335,29 +321,25 @@ MovePlayerLeft:
 
 MovePlayerLeftDone:
 MovePlayerRight:
-		LDA buttons
+	LDA buttons
   AND #%00000001
   BEQ MovePlayerRightDone
 
-  LDA playerx
-  ADC #$01
-  STA playerx
+  INC playerx
   ;;if down button pressed
   ;;  if paddle bottom < bottom wall
   ;;    move paddle top and bottom down
-
 MovePlayerRightDone:
-CheckCollision:
+
 		;;if ball x < paddle1x
   ;;  if ball y > paddle y top
   ;;    if ball y < paddle y bottom
   ;;      bounce, ball now moving left
 
-CheckCollisionDone:
 JMP GameEngineDone
 
 UpdateSprites:
-	;; Player
+	; Player
   LDA playery
   STA $0200
   STA $0204
@@ -427,7 +409,6 @@ DrawScore:
 ;  ADC #$30           ; add ascii offset
   STA $2007
   RTS
-
 
 IncrementScore:
 IncOnes:
