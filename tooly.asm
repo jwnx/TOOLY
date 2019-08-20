@@ -1,15 +1,22 @@
 ;----------------------------------------------------------------
-; constants
+; Constants
 ;----------------------------------------------------------------
+  PPUCTRL	       = $2000
+  PPUMASK	       = $2001
   PPUSTATUS      = $2002
+  OAMADDR        = $2003
+  PPUSCROLL	     = $2005
   PPUADDR        = $2006
   PPUDATA        = $2007
+  OAMDMA         = $4014
 
-	STATETITLE     = $00  ; displaying title screen
-	STATEPLAYING   = $01  ; move paddles/ball, check for collisions
-	STATEGAMEOVER  = $02  ; displaying game over screen
+  CTRL1          = $4016
 
-	RIGHTWALL      = $F4  ; when ball reaches one of these, do something
+	STATETITLE     = $00  ; Displaying title screen
+	STATEPLAYING   = $01  ; Move paddles/ball, check for collisions
+	STATEGAMEOVER  = $02  ; Displaying game over screen
+
+	RIGHTWALL      = $F4  ; When ball reaches one of these, do something
 	TOPWALL        = $20
 	BOTTOMWALL     = $E0
 	LEFTWALL       = $04
@@ -41,9 +48,7 @@
 
   buttons         .dsb 1
   score           .dsb 1
-  pointerLo       .dsb 1   ; pointer variables are declared in RAM
-  pointerHi       .dsb 1   ; low byte first, high byte immediately after
-  scoreOnes       .dsb 1   ; byte for each digit in the decimal score
+  scoreOnes       .dsb 1   ; Byte for each digit in the decimal score
   scoreTens       .dsb 1
   scoreHundreds   .dsb 1
 
@@ -71,10 +76,10 @@
 ; iNES header
 ;----------------------------------------------------------------
 
-	.inesprg 1   ; 1x 16KB PRG code
-	.ineschr 1   ; 1x  8KB CHR data
-	.inesmap 0   ; mapper 0 = NROM, no bank swapping
-	.inesmir 1   ; background mirroring
+	.inesprg 1            ; 1x 16KB PRG code
+	.ineschr 1            ; 1x  8KB CHR data
+	.inesmap 0            ; Mapper 0 = NROM, no bank swapping
+	.inesmir 1            ; Background mirroring
 
 ;----------------------------------------------------------------
 ; PGR
@@ -82,32 +87,32 @@
 
   .org $C000
 
-vblankwait:    ; First wait for vblank to make sure PPU is ready
+vblankwait:             ; First wait for vblank to make sure PPU is ready
   BIT $2002
   BPL vblankwait
   RTS
 
 LoadToPPU:
-  LDY #$00              ; start out at 0
+  LDY #$00              ; Start out at 0
 LoadToPPULoop:
-  LDA (pointer), y      ; load data from address
-  STA PPUDATA           ; write to PPU
+  LDA (pointer), y      ; Load data from address
+  STA PPUDATA           ; Write to PPU
   INY
   DEC datasize
   BNE LoadToPPULoop
   RTS
 
 Reset:
-	SEI          ; disable IRQs
-  CLD          ; disable decimal mode
+	SEI                   ; Disable IRQs
+  CLD                   ; Disable decimal mode
   LDX #$40
-  STX $4017    ; disable APU frame IRQ
+  STX $4017             ; Disable APU frame IRQ
   LDX #$FF
-  TXS          ; Set up stack
-  INX          ; now X = 0
-  STX $2000    ; disable NMI
-  STX $2001    ; disable rendering
-  STX $4010    ; disable DMC IRQs
+  TXS                   ; Set up stack
+  INX                   ; Now X = 0
+  STX $2000             ; Disable NMI
+  STX $2001             ; Disable rendering
+  STX $4010             ; Disable DMC IRQs
   JSR vblankwait
 
 clrmem:
@@ -126,7 +131,7 @@ clrmem:
   JSR vblankwait
 
 LoadPalettes:
-  LDA PPUSTATUS         ; read PPU status to reset the high/low latch
+  LDA PPUSTATUS         ; Read PPU status to reset the high/low latch
   setPpuAddr #$3F00
   setPointer palette
   LDA #$20
@@ -135,16 +140,16 @@ LoadPalettes:
 
   ; $0200-$02FF	contains 256 bytes to be copied to OAM during next vertical blank
 LoadSprites:
-	LDX #$00              ; start at 0
+	LDX #$00              ; Start at 0
 LoadSpritesLoop:
-	LDA sprites, x        ; load data from address (sprites +  x)
-  STA $0200, x          ; store into RAM address ($0200 + x)
+	LDA sprites, x        ; Load data from address (sprites +  x)
+  STA $0200, x          ; Store into RAM address ($0200 + x)
   INX                   ; X = X + 1
-  CPX #$20              ; Compare X to hex $20, decimal 32
+  CPX #$20              ; compare X to hex $20, decimal 32
   BNE LoadSpritesLoop   ; Branch to LoadSpritesLoop if compare was Not Equal to zero
 
 LoadBackground:
-  LDA PPUSTATUS         ; read PPU status to reset the high/low latch
+  LDA PPUSTATUS         ; Read PPU status to reset the high/low latch
   setPpuAddr #$2000
   setPointer background
   LDA #$00
@@ -152,13 +157,13 @@ LoadBackground:
   LDX #$00
 LoadBackgroundLoop:
   JSR LoadToPPU
-  INC pointer+1         ; low byte went 0 to 256, so high byte needs to be changed now
+  INC pointer+1         ; Low byte went 0 to 256, so high byte needs to be changed now
   INX
   CPX #$04
   BNE LoadBackgroundLoop
 
 LoadAttribute:
-  LDA PPUSTATUS         ; read PPU status to reset the high/low latch
+  LDA PPUSTATUS         ; Read PPU status to reset the high/low latch
   setPpuAddr #$23C0
   setPointer attribute
   LDA #$08
@@ -187,49 +192,46 @@ LoadAttribute:
   LDA #$80
   STA playerx
 
-;;;Set initial score value
+  ;Set initial score value
   LDA #$00
   STA scoreOnes
   STA scoreTens
   STA scoreHundreds
 
-;;:Set starting game state
+  ;Set starting game state
   LDA #STATEPLAYING
   STA gamestate
 
 
-  LDA #%10010000   ; enable NMI, sprites from Pattern Table 0, background from Pattern Table 1
+  LDA #%10010000        ; Enable NMI, sprites from Pattern Table 0, background from Pattern Table 1
   STA $2000
 
-  LDA #%00011110   ; enable sprites, enable background, no clipping on left side
+  LDA #%00011110        ; Enable sprites, enable background, no clipping on left side
   STA $2001
 
-
 Forever:
-	JMP Forever     ;jump back to Forever, infinite loop
-
-
+	JMP Forever           ; Initialization is done, loop forever
 
 NMI:
+  ; Sprites have been loaded into $0200
 	LDA #$00
-  STA $2003       ; set the low byte (00) of the RAM address
+  STA OAMADDR           ; Set the low byte (00) of the RAM address
   LDA #$02
-  STA $4014       ; set the high byte (02) of the RAM address, start the transfer
+  STA OAMDMA            ; Set the high byte (02) of the RAM address, start the transfer
 
   JSR DrawScore
 
-  ;;This is the PPU clean up section, so rendering the next frame starts properly.
-  LDA #%10010000   ; enable NMI, sprites from Pattern Table 0, background from Pattern Table 1
-  STA $2000
-  LDA #%00011110   ; enable sprites, enable background, no clipping on left side
-  STA $2001
-  LDA #$00        ;;tell the ppu there is no background scrolling
-  STA $2005
-  STA $2005
+  ; This is the PPU clean up section, so rendering the next frame starts properly.
+  LDA #%10000000        ; Enable NMI, background and sprites from Pattern Table 0
+  STA PPUCTRL
+  LDA #%00011110        ; Enable sprites, enable background, no clipping on left side
+  STA PPUMASK
+  LDA #$00              ; Tell the ppu there is no background scrolling
+  STA PPUSCROLL
+  STA PPUSCROLL
 
-  ;;;all graphics updates done by here, run game engine
-
-  JSR ReadController  ;;get the current button data for player 1
+  ; All graphics updates done by here, run game engine
+  JSR ReadController     ; Get the current button data
 
 GameEngine:
 	LDA gamestate
@@ -243,10 +245,9 @@ GameEngine:
   LDA gamestate
   CMP #STATEPLAYING
   BEQ EnginePlaying   ;;game is playing
+
 GameEngineDone:
-
 	JSR UpdateSprites  ;;set ball/paddle sprites from positions
-
   RTI             ; return from interrupt
 
 ;;;;;;;;
@@ -273,37 +274,28 @@ EngineGameOver:
 ;;;;;;;;;;;
 
 EnginePlaying:
-
-	MoveToolyRight:
+MoveToolyRight:
   LDA toolyright
   BEQ MoveToolyRightDone   ;;if toolyright=0, skip this section
 
 MoveToolyRightDone:
-
-
-	MoveToolyLeft:
-		LDA toolyleft
+MoveToolyLeft:
+	LDA toolyleft
   BEQ MoveToolyLeftDone   ;;if ballleft=0, skip this section
 
 MoveToolyLeftDone:
-
-
-	MoveToolyUp:
-		LDA toolyup
+MoveToolyUp:
+	LDA toolyup
   BEQ MoveToolyUpDone   ;;if ballup=0, skip this section
 
 MoveToolyUpDone:
-
-
-	MoveToolyDown:
-		LDA toolydown
+MoveToolyDown:
+	LDA toolydown
   BEQ MoveToolyDownDone   ;;if ballup=0, skip this section
 
 MoveToolyDownDone:
-
-
-	MovePlayerUp:
-		LDA buttons
+MovePlayerUp:
+	LDA buttons
   AND #%00001000
   BEQ MovePlayerUpDone
 
@@ -315,10 +307,8 @@ MoveToolyDownDone:
   ;;  if paddle top > top wall
   ;;    move paddle top and bottom up
 MovePlayerUpDone:
-
-
-	MovePlayerDown:
-		LDA buttons
+MovePlayerDown:
+	LDA buttons
   AND #%00000100
   BEQ MovePlayerDownDone
 
@@ -328,11 +318,10 @@ MovePlayerUpDone:
   ;;if down button pressed
   ;;  if paddle bottom < bottom wall
   ;;    move paddle top and bottom down
+
 MovePlayerDownDone:
-
-
-	MovePlayerLeft:
-		LDA buttons
+MovePlayerLeft:
+	LDA buttons
   AND #%00000010
   BEQ MovePlayerLeftDone
 
@@ -343,9 +332,9 @@ MovePlayerDownDone:
   ;;if up button pressed
   ;;  if paddle top > top wall
   ;;    move paddle top and bottom up
-MovePlayerLeftDone:
 
-	MovePlayerRight:
+MovePlayerLeftDone:
+MovePlayerRight:
 		LDA buttons
   AND #%00000001
   BEQ MovePlayerRightDone
@@ -356,18 +345,16 @@ MovePlayerLeftDone:
   ;;if down button pressed
   ;;  if paddle bottom < bottom wall
   ;;    move paddle top and bottom down
+
 MovePlayerRightDone:
-
-
-	CheckCollision:
+CheckCollision:
 		;;if ball x < paddle1x
   ;;  if ball y > paddle y top
   ;;    if ball y < paddle y bottom
   ;;      bounce, ball now moving left
+
 CheckCollisionDone:
-
-	JMP GameEngineDone
-
+JMP GameEngineDone
 
 UpdateSprites:
 	;; Player
@@ -417,10 +404,8 @@ UpdateSprites:
   STA $0217
   STA $021F
 
-
   ;;update tooly sprites
   RTS
-
 
 DrawScore:
 	LDA $2002
@@ -445,8 +430,8 @@ DrawScore:
 
 
 IncrementScore:
-	IncOnes:
-		LDA scoreOnes      ; load the lowest digit of the number
+IncOnes:
+	LDA scoreOnes      ; load the lowest digit of the number
   CLC
   ADC #$01           ; add one
   STA scoreOnes
@@ -470,18 +455,16 @@ IncHundreds:
   STA scoreHundreds
 IncDone:
 
-
-
-	ReadController:
-		LDA #$01
-  STA $4016
+ReadController:
+	LDA #$01
+  STA CTRL1
   LDA #$00
-  STA $4016
+  STA CTRL1
   LDX #$08
 ReadControllerLoop:
-	LDA $4016
-  LSR A            ; bit0 -> Carry
-  ROL buttons      ; bit0 <- Carry
+	LDA CTRL1
+  LSR A                 ; Bit 0 -> Carry
+  ROL buttons           ; Carry -> bit 0; bit 7 -> Carry
   DEX
   BNE ReadControllerLoop
   RTS
