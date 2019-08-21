@@ -42,11 +42,12 @@
   coordx          .dsb 1
   coordy          .dsb 1
 
-  ; Score
-  score           .dsb 1
-  scoreOnes       .dsb 1   ; Byte for each digit in the decimal score
-  scoreTens       .dsb 1
-  scoreHundreds   .dsb 1
+  ; Time
+  ticks           .dsb 1
+  timeMinutes2    .dsb 1
+  timeMinutes1    .dsb 1
+  timeSeconds2    .dsb 1
+  timeSeconds1    .dsb 1
 
   gamestate       .dsb 1
 
@@ -185,11 +186,13 @@ LoadAttribute:
   LDA #$64
   STA health
 
-  ; Set initial score value
+  ; Set initial time value
   LDA #$00
-  STA scoreOnes
-  STA scoreTens
-  STA scoreHundreds
+  STA ticks
+  STA timeSeconds1
+  STA timeSeconds2
+  STA timeMinutes1
+  STA timeMinutes2
 
   ; Set starting game state
   LDA #STATEPLAYING
@@ -211,7 +214,7 @@ NMI:
   LDA #$02
   STA OAMDMA            ; Set the high byte (02) of the RAM address, start the transfer
 
-  JSR DrawScore
+  JSR DrawTime
 
   ; This is the PPU clean up section, so rendering the next frame starts properly.
   LDA #%10000000        ; Enable NMI, background and sprites from Pattern Table 0
@@ -352,6 +355,7 @@ MovePlayerRight:
 MovePlayerRightDone:
 
   JSR CheckHealthUp
+  JSR IncrementTime
 
   JMP GameEngineDone
 
@@ -480,52 +484,46 @@ UpdateSprites:
 
   RTS
 
-DrawScore:
-	LDA $2002
-  LDA #$20
-  STA $2006
-  LDA #$20
-  STA $2006          ; start drawing the score at PPU $2020
-
-  LDA scoreHundreds  ; get first digit
-;  CLC
-;  ADC #$30           ; add ascii offset  (this is UNUSED because the tiles for digits start at 0)
-  STA $2007          ; draw to background
-  LDA scoreTens      ; next digit
-;  CLC
-;  ADC #$30           ; add ascii offset
-  STA $2007
-  LDA scoreOnes      ; last digit
-;  CLC
-;  ADC #$30           ; add ascii offset
-  STA $2007
+DrawTime:
+  LDA PPUSTATUS         ; Read PPU status to reset the high/low latch
+  setPpuAddr #$2020
+  setPointer timeMinutes2
+  LDA #$04
+  STA datasize
+  JSR LoadToPPU
   RTS
 
-IncrementScore:
-IncOnes:
-	LDA scoreOnes      ; load the lowest digit of the number
-  CLC
-  ADC #$01           ; add one
-  STA scoreOnes
-  CMP #$0A           ; check if it overflowed, now equals 10
-  BNE IncDone        ; if there was no overflow, all done
-IncTens:
+IncrementTime:
+  INC ticks
+  LDA #$07
+  AND ticks
+  BNE IncDone
+  INC timeSeconds1
+  LDA timeSeconds1
+  CMP #$0A              ; Check if it overflowed, now equals 10
+  BNE IncDone
 	LDA #$00
-  STA scoreOnes      ; wrap digit to 0
-  LDA scoreTens      ; load the next digit
-  CLC
-  ADC #$01           ; add one, the carry from previous digit
-  STA scoreTens
-  CMP #$0A           ; check if it overflowed, now equals 10
-  BNE IncDone        ; if there was no overflow, all done
-IncHundreds:
+  STA timeSeconds1      ; Wrap digit to 0
+  INC timeSeconds2
+  LDA timeSeconds2
+  CMP #$06              ; Check if it overflowed, now equals 6
+  BNE IncDone
 	LDA #$00
-  STA scoreTens      ; wrap digit to 0
-  LDA scoreHundreds  ; load the next digit
-  CLC
-  ADC #$01           ; add one, the carry from previous digit
-  STA scoreHundreds
+  STA timeSeconds2      ; Wrap digit to 0
+  INC timeMinutes1
+  LDA timeMinutes1
+  CMP #$0A              ; Check if it overflowed, now equals 10
+  BNE IncDone
+	LDA #$00
+  STA timeMinutes1      ; Wrap digit to 0
+  INC timeMinutes2
+  LDA timeSeconds2
+  CMP #$06              ; Check if it overflowed, now equals 6
+  BNE IncDone
+	LDA #$00
+  STA timeMinutes2      ; Wrap digit to 0
 IncDone:
+  RTS
 
 ReadController:
 	LDA #$01
