@@ -12,6 +12,11 @@
 
   CTRL1          = $4016
 
+  TIMESECONDS1   = $0221
+  TIMESECONDS2   = $0225
+  TIMEMINUTES1   = $022D
+  TIMEMINUTES2   = $0231
+
 	STATETITLE     = $00  ; Displaying title screen
 	STATEPLAYING   = $01  ; Move player and tooly
 	STATEGAMEOVER  = $02  ; Displaying game over screen
@@ -44,10 +49,6 @@
 
   ; Time
   ticks           .dsb 1
-  timeMinutes2    .dsb 1
-  timeMinutes1    .dsb 1
-  timeSeconds2    .dsb 1
-  timeSeconds1    .dsb 1
 
   gamestate       .dsb 1
 
@@ -89,7 +90,7 @@
   .org $C000
 
 vblankwait:             ; First wait for vblank to make sure PPU is ready
-  BIT $2002
+  BIT PPUSTATUS
   BPL vblankwait
   RTS
 
@@ -146,7 +147,7 @@ LoadSpritesLoop:
 	LDA sprites, x        ; Load data from address (sprites +  x)
   STA $0200, x          ; Store into RAM address ($0200 + x)
   INX                   ; X = X + 1
-  CPX #$20              ; compare X to hex $20, decimal 32
+  CPX #$34
   BNE LoadSpritesLoop   ; Branch to LoadSpritesLoop if compare was Not Equal to zero
 
 LoadBackground:
@@ -189,10 +190,6 @@ LoadAttribute:
   ; Set initial time value
   LDA #$00
   STA ticks
-  STA timeSeconds1
-  STA timeSeconds2
-  STA timeMinutes1
-  STA timeMinutes2
 
   ; Set starting game state
   LDA #STATEPLAYING
@@ -213,8 +210,6 @@ NMI:
   STA OAMADDR           ; Set the low byte (00) of the RAM address
   LDA #$02
   STA OAMDMA            ; Set the high byte (02) of the RAM address, start the transfer
-
-  JSR DrawTime
 
   ; This is the PPU clean up section, so rendering the next frame starts properly.
   LDA #%10000000        ; Enable NMI, background and sprites from Pattern Table 0
@@ -255,6 +250,7 @@ EnginePlaying:
   JSR CheckHealthDown
 
 MoveTooly:
+  JMP MoveToolyDone
   LDA #$01
   EOR turn
   STA turn
@@ -439,58 +435,30 @@ UpdateSprites:
   LDA playery
   STA $0200
   STA $0204
-
-  ADC #$04
+  ADC #$08
   STA $0208
   STA $020C
-
-  ;LDA player_tile_1
-  ;STA $0201
-  ;STA $0205
-  ;STA $0209
-  ;STA $020D
-
-  ;LDA #$00
-  ;STA $0202
-  ;STA $0206
-  ;STA $020A
-  ;STA $020E
-
   LDA playerx
   STA $0203
   STA $020B
-
-  ADC #$04
+  ADC #$08
   STA $0207
   STA $020F
 
-  ;; Tooly
-
+  ; Tooly
   LDA toolyy
   STA $0210
   STA $0214
-
-  ADC #$04
+  ADC #$08
   STA $0218
   STA $021C
-
   LDA toolyx
   STA $0213
   STA $021B
-
-  ADC #$04
+  ADC #$08
   STA $0217
   STA $021F
 
-  RTS
-
-DrawTime:
-  LDA PPUSTATUS         ; Read PPU status to reset the high/low latch
-  setPpuAddr #$2020
-  setPointer timeMinutes2
-  LDA #$04
-  STA datasize
-  JSR LoadToPPU
   RTS
 
 IncrementTime:
@@ -498,30 +466,30 @@ IncrementTime:
   LDA #$07
   AND ticks
   BNE IncDone
-  INC timeSeconds1
-  LDA timeSeconds1
-  CMP #$0A              ; Check if it overflowed, now equals 10
+  INC TIMESECONDS1
+  LDA TIMESECONDS1
+  CMP #$FA              ; Check if it overflowed, now equals 10
   BNE IncDone
-	LDA #$00
-  STA timeSeconds1      ; Wrap digit to 0
-  INC timeSeconds2
-  LDA timeSeconds2
-  CMP #$06              ; Check if it overflowed, now equals 6
+	LDA #$F0
+  STA TIMESECONDS1      ; Wrap digit to 0
+  INC TIMESECONDS2
+  LDA TIMESECONDS2
+  CMP #$F6              ; Check if it overflowed, now equals 6
   BNE IncDone
-	LDA #$00
-  STA timeSeconds2      ; Wrap digit to 0
-  INC timeMinutes1
-  LDA timeMinutes1
-  CMP #$0A              ; Check if it overflowed, now equals 10
+	LDA #$F0
+  STA TIMESECONDS2      ; Wrap digit to 0
+  INC TIMEMINUTES1
+  LDA TIMEMINUTES1
+  CMP #$FA              ; Check if it overflowed, now equals 10
   BNE IncDone
-	LDA #$00
-  STA timeMinutes1      ; Wrap digit to 0
-  INC timeMinutes2
-  LDA timeSeconds2
-  CMP #$06              ; Check if it overflowed, now equals 6
+	LDA #$F0
+  STA TIMEMINUTES1      ; Wrap digit to 0
+  INC TIMEMINUTES2
+  LDA TIMESECONDS2
+  CMP #$F6              ; Check if it overflowed, now equals 6
   BNE IncDone
-	LDA #$00
-  STA timeMinutes2      ; Wrap digit to 0
+	LDA #$F0
+  STA TIMEMINUTES2      ; Wrap digit to 0
 IncDone:
   RTS
 
