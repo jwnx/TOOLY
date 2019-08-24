@@ -17,6 +17,9 @@
   TIMEMINUTES1   = $022D
   TIMEMINUTES2   = $0231
 
+  HEALTHBASE1    = $0234
+  HEALTHBASE2    = $025C
+
 	STATETITLE     = $00  ; Displaying title screen
 	STATEPLAYING   = $01  ; Move player and tooly
 	STATEGAMEOVER  = $02  ; Displaying game over screen
@@ -42,6 +45,7 @@
   playerx         .dsb 1
   playery         .dsb 1
   health          .dsb 1
+  relieve         .dsb 1
 
   ; For function CheckCollision
   coordx          .dsb 1
@@ -147,7 +151,7 @@ LoadSpritesLoop:
 	LDA sprites, x        ; Load data from address (sprites +  x)
   STA $0200, x          ; Store into RAM address ($0200 + x)
   INX                   ; X = X + 1
-  CPX #$34
+  CPX #$84
   BNE LoadSpritesLoop   ; Branch to LoadSpritesLoop if compare was Not Equal to zero
 
 LoadBackground:
@@ -184,7 +188,7 @@ LoadAttribute:
   STA playerx
 
   ; Set initial health value
-  LDA #$64
+  LDA #$0A
   STA health
 
   ; Set initial time value
@@ -247,10 +251,11 @@ EngineGameOver:
   JMP GameEngineDone
 
 EnginePlaying:
-  JSR CheckHealthDown
 
 MoveTooly:
-  JMP MoveToolyDone
+  LDA TIMEMINUTES1
+  CMP #$F0
+  BNE MoveToolyX
   LDA #$01
   EOR turn
   STA turn
@@ -350,7 +355,8 @@ MovePlayerRight:
   INC playerx
 MovePlayerRightDone:
 
-  JSR CheckHealthUp
+  ;JSR CheckHealthUp
+  JSR CheckHealthDown
   JSR IncrementTime
 
   JMP GameEngineDone
@@ -362,11 +368,25 @@ CheckHealthDown:
   LDA playery
   CMP toolyy
   BNE CheckHealthDownDone
+  LDA relieve
+  BEQ Bite
+  DEC relieve
+  JMP CheckHealthDownDone
+Bite:
+  LDA #$10
+  STA relieve
   DEC health
+  LDA health
+  ASL A
+  ASL A
+  TAX
+  LDA #$FF
+  STA HEALTHBASE1, x
+  STA HEALTHBASE2, x
+  LDA health
   BNE CheckHealthDownDone
   LDA #STATEGAMEOVER
   STA gamestate
-  JMP GameEngineDone
 CheckHealthDownDone:
   RTS
 
@@ -435,7 +455,7 @@ UpdateSprites:
   LDA playery
   STA $0200
   STA $0204
-  ADC #$08
+  ADC #$07
   STA $0208
   STA $020C
   LDA playerx
@@ -463,7 +483,7 @@ UpdateSprites:
 
 IncrementTime:
   INC ticks
-  LDA #$3F
+  LDA #$1F
   AND ticks
   BNE IncDone
   INC TIMESECONDS1
@@ -514,16 +534,16 @@ ReadControllerLoop:
 .org $E000
 palette:
   ; Background
-  .db $3b,$37,$27,$00, $3b,$15,$01,$1c, $3b,$0c,$19,$31, $3b,$19,$0c,$1c
+  .db $3b,$37,$27,$00, $3b,$01,$15,$1c, $3b,$0c,$19,$31, $3b,$0c,$19,$1c
   ; Sprites
-  .db $3b,$00,$1a,$3d, $3b,$30,$19,$1d, $3b,$20,$15,$01, $3b,$2e,$30,$3f
+  .db $3b,$1a,$00,$3d, $3b,$19,$30,$1d, $3b,$20,$15,$01, $3b,$2e,$30,$3f
 
 sprites:
 	  ; vert tile attr horiz ; Player
-  .db $00, $C9, $00, $00   ; sprite 0
-  .db $00, $CA, $00, $00   ; sprite 1
-  .db $00, $D9, $00, $00   ; sprite 2
-  .db $00, $DA, $00, $00   ; sprite 3
+  .db $00, $C9, $01, $00   ; sprite 0
+  .db $00, $CA, $01, $00   ; sprite 1
+  .db $00, $D9, $01, $00   ; sprite 2
+  .db $00, $DA, $01, $00   ; sprite 3
 
 	  ; vert tile attr horiz ; Tooly
   .db $00, $11, $00, $00   ; sprite 0
@@ -531,12 +551,35 @@ sprites:
   .db $00, $21, $00, $00   ; sprite 2
   .db $00, $22, $00, $00   ; sprite 3
 
-	  ; vert tile attr horiz ; Timer
+	  ; vert tile attr horiz ; Clock
   .db $C8, $f0, $00, $E9   ; Seconds 1
   .db $C8, $f0, $00, $E1   ; Seconds 2
   .db $C8, $fa, $00, $D9   ; :
   .db $C8, $f0, $00, $D1   ; Minutes 1
   .db $C8, $f0, $00, $C9   ; Minutes 2
+
+	  ; vert tile attr horiz ; Life
+  .db $CF, $e5, $02, $28
+  .db $CF, $e5, $02, $30
+  .db $CF, $e5, $02, $38
+  .db $CF, $e5, $02, $40
+  .db $CF, $e5, $02, $48
+  .db $CF, $e5, $02, $50
+  .db $CF, $e5, $02, $58
+  .db $CF, $e5, $02, $60
+  .db $CF, $e5, $02, $68
+  .db $CF, $e5, $02, $70
+
+  .db $D7, $e5, $02, $28
+  .db $D7, $e5, $02, $30
+  .db $D7, $e5, $02, $38
+  .db $D7, $e5, $02, $40
+  .db $D7, $e5, $02, $48
+  .db $D7, $e5, $02, $50
+  .db $D7, $e5, $02, $58
+  .db $D7, $e5, $02, $60
+  .db $D7, $e5, $02, $68
+  .db $D7, $e5, $02, $70
 
 background:
   .db $0e,$3c,$2d,$28,$29,$3a,$a4,$2b,$0b,$2d,$2d,$1d,$28,$29,$3a,$08
@@ -599,14 +642,15 @@ background:
   .db $a4,$a4,$a4,$a4,$a4,$a4,$a4,$a4,$a4,$a4,$a4,$a4,$a4,$a4,$a4,$a4
   .db $a4,$a4,$a4,$a4,$a4,$a4,$a4,$a4,$a4,$a4,$a4,$a4,$a4,$a4,$a4,$a4
   .db $a4,$a4,$a4,$a4,$a4,$a4,$a4,$a4,$a4,$a4,$a4,$a4,$a4,$a4,$a4,$a4
-
+.db $3b,$37,$27,$00, $3b,$15,$01,$1c, $3b,$0c,$19,$31, $3b,$19,$0c,$1c
+.db $3b,$00,$1a,$3d, $3b,$30,$19,$1d, $3b,$20,$15,$01, $3b,$2e,$30,$3f
 attribute:
-  .db %00000000, %00000000, %00000000, %00000000, %00000000, %00000000, %00000000, %00000000
-  .db %00000000, %00000000, %00000000, %00000000, %00000000, %00000000, %00000000, %00000000
-  .db %01010101, %01010101, %01010101, %01010101, %01010101, %01010101, %01010101, %01010101
-  .db %01010101, %01010101, %01010101, %01010101, %01010101, %01010101, %01010101, %01010101
-  .db %10101010, %10101010, %10101010, %10101010, %10101010, %10101010, %10101010, %10101010
-  .db %10101010, %10101010, %10101010, %10101010, %10101010, %10101010, %10101010, %10101010
+  .db %10001000, %10101010, %10101010, %10101010, %10101010, %10101010, %10101010, %10101010
+  .db %01000100, %01010101, %01010101, %01010101, %01010101, %01010101, %01010101, %01010101
+  .db %11111111, %11111111, %11111111, %11111111, %11111111, %11111111, %11111111, %11111111
+  .db %11111111, %11111111, %11111111, %11111111, %11111111, %11111111, %11111111, %11111111
+  .db %11111111, %11111111, %11111111, %11111111, %11111111, %11111111, %11111111, %11111111
+  .db %11111111, %11111111, %11111111, %11111111, %11111111, %11111111, %11111111, %11111111
   .db %11111111, %11111111, %11111111, %11111111, %11111111, %11111111, %11111111, %11111111
   .db %11111111, %11111111, %11111111, %11111111, %11111111, %11111111, %11111111, %11111111
 
