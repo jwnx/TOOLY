@@ -19,6 +19,7 @@
 
   HEALTHBASE1    = $0234
   HEALTHBASE2    = $025C
+  MAXHEALTH      = $0A
 
 	STATETITLE     = $00  ; Displaying title screen
 	STATEPLAYING   = $01  ; Move player and tooly
@@ -46,6 +47,7 @@
   playery         .dsb 1
   health          .dsb 1
   relieve         .dsb 1
+  stuffed         .dsb 1
 
   ; For function CheckCollision
   coordx          .dsb 1
@@ -188,7 +190,7 @@ LoadAttribute:
   STA playerx
 
   ; Set initial health value
-  LDA #$0A
+  LDA #MAXHEALTH
   STA health
 
   ; Set initial time value
@@ -253,7 +255,6 @@ EngineGameOver:
 EnginePlaying:
 
 MoveTooly:
-  JMP MoveToolyDone
   LDA TIMEMINUTES1
   CMP #$F0
   BNE MoveToolyX
@@ -290,7 +291,6 @@ MoveToolyY:
   BCC MoveToolyUp
 MoveToolyDown:
   INC coordy
-  JSR LoadToolyCoords
   JSR CheckCollision
   CMP #$01
   BEQ MoveToolyDone
@@ -356,7 +356,7 @@ MovePlayerRight:
   INC playerx
 MovePlayerRightDone:
 
-  ;JSR CheckHealthUp
+  JSR CheckHealthUp
   JSR CheckHealthDown
   JSR IncrementTime
 
@@ -392,10 +392,31 @@ CheckHealthDownDone:
   RTS
 
 CheckHealthUp:
+  LDA stuffed
+  BEQ Recover
+  DEC stuffed
+  JMP CheckHealthUpDone
+Recover:
+  LDA health
+  CMP #MAXHEALTH
+  BEQ CheckHealthUpDone
   setPointer waterandfood
+  JSR LoadPlayerCoords
   JSR CheckOverlap
-  ADC health
-  STA health
+  CMP #$01
+  BNE CheckHealthUpDone
+  LDA #$10
+  STA stuffed
+  LDA health
+  ASL A
+  ASL A
+  TAX
+  LDA #$CF
+  STA HEALTHBASE1, x
+  LDA #$D7
+  STA HEALTHBASE2, x
+  INC health
+CheckHealthUpDone:
   RTS
 
   ; Convert pixels to blocks
@@ -559,7 +580,7 @@ sprites:
   .db $C8, $f0, $00, $D1   ; Minutes 1
   .db $C8, $f0, $00, $C9   ; Minutes 2
 
-	  ; vert tile attr horiz ; Life
+	  ; vert tile attr horiz ; Health
   .db $CF, $e5, $02, $28
   .db $CF, $e5, $02, $30
   .db $CF, $e5, $02, $38
@@ -680,7 +701,9 @@ collision: ; (x,y) coordinates, from (0,0) to (1F,1D)
   .dsb 228
 
 waterandfood:
-  .dsb 256
+  .dw $0F04,$1004
+  .dw $1C04,$1B04,$1C05,$1B05
+  .dsb 250
 
 ;----------------------------------------------------------------
 ; Interrupt vectors
