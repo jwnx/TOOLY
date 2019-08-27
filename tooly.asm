@@ -1,11 +1,11 @@
 ;----------------------------------------------------------------
 ; Constants
 ;----------------------------------------------------------------
-  PPUCTRL	       = $2000
-  PPUMASK	       = $2001
+  PPUCTRL	 = $2000
+  PPUMASK	 = $2001
   PPUSTATUS      = $2002
   OAMADDR        = $2003
-  PPUSCROLL	     = $2005
+  PPUSCROLL	 = $2005
   PPUADDR        = $2006
   PPUDATA        = $2007
   OAMDMA         = $4014
@@ -21,9 +21,9 @@
   HEALTHBASE2    = $025C
   MAXHEALTH      = $0A
 
-	STATETITLE     = $00  ; Displaying title screen
-	STATEPLAYING   = $01  ; Move player and tooly
-	STATEGAMEOVER  = $02  ; Displaying game over screen
+  STATETITLE     = $00  ; Displaying title screen
+  STATEPLAYING   = $01  ; Move player and tooly
+  STATEGAMEOVER  = $02  ; Displaying game over screen
 
 ;----------------------------------------------------------------
 ; Variables
@@ -111,7 +111,7 @@ LoadToPPULoop:
   RTS
 
 Reset:
-	SEI                   ; Disable IRQs
+  SEI                   ; Disable IRQs
   CLD                   ; Disable decimal mode
   LDX #$40
   STX $4017             ; Disable APU frame IRQ
@@ -124,7 +124,7 @@ Reset:
   JSR vblankwait
 
 clrmem:
-	LDA #$00
+  LDA #$00
   STA $0000, x
   STA $0100, x
   STA $0200, x
@@ -148,9 +148,9 @@ LoadPalettes:
 
   ; $0200-$02FF	contains 256 bytes to be copied to OAM during next vertical blank
 LoadSprites:
-	LDX #$00              ; Start at 0
+  LDX #$00              ; Start at 0
 LoadSpritesLoop:
-	LDA sprites, x        ; Load data from address (sprites +  x)
+  LDA sprites, x        ; Load data from address (sprites +  x)
   STA $0200, x          ; Store into RAM address ($0200 + x)
   INX                   ; X = X + 1
   CPX #$84
@@ -198,7 +198,7 @@ LoadAttribute:
   STA ticks
 
   ; Set starting game state
-  LDA #STATEPLAYING
+  LDA #STATETITLE
   STA gamestate
 
   LDA #%10010000        ; Enable NMI, sprites from Pattern Table 0, background from Pattern Table 1
@@ -208,11 +208,11 @@ LoadAttribute:
   STA $2001
 
 Forever:
-	JMP Forever           ; Initialization is done, loop forever
+  JMP Forever           ; Initialization is done, loop forever
 
 NMI:
   ; Sprites have been loaded into $0200
-	LDA #$00
+  LDA #$00
   STA OAMADDR           ; Set the low byte (00) of the RAM address
   LDA #$02
   STA OAMDMA            ; Set the high byte (02) of the RAM address, start the transfer
@@ -230,7 +230,7 @@ NMI:
   JSR ReadController     ; Get the current button data
 
 GameEngine:
-	LDA gamestate
+  LDA gamestate
   CMP #STATETITLE
   BEQ EngineTitle
 
@@ -310,7 +310,7 @@ MoveToolyUp:
 MoveToolyDone:
 
 MovePlayerUp:
-	LDA buttons
+  LDA buttons
   AND #%00001000
   BEQ MovePlayerUpDone
 
@@ -323,7 +323,7 @@ MovePlayerUp:
 MovePlayerUpDone:
 
 MovePlayerDown:
-	LDA buttons
+  LDA buttons
   AND #%00000100
   BEQ MovePlayerDownDone
 
@@ -336,7 +336,7 @@ MovePlayerDown:
 MovePlayerDownDone:
 
 MovePlayerLeft:
-	LDA buttons
+  LDA buttons
   AND #%00000010
   BEQ MovePlayerLeftDone
 
@@ -349,7 +349,7 @@ MovePlayerLeft:
 MovePlayerLeftDone:
 
 MovePlayerRight:
-	LDA buttons
+  LDA buttons
   AND #%00000001
   BEQ MovePlayerRightDone
 
@@ -478,7 +478,7 @@ Continue:
   RTS
 
 UpdateSprites:
-	; Player
+  ; Player
   LDA playery
   STA $0200
   STA $0204
@@ -517,37 +517,37 @@ IncrementTime:
   LDA TIMESECONDS1
   CMP #$FA              ; Check if it overflowed, now equals 10
   BNE IncDone
-	LDA #$F0
+  LDA #$F0
   STA TIMESECONDS1      ; Wrap digit to 0
   INC TIMESECONDS2
   LDA TIMESECONDS2
   CMP #$F6              ; Check if it overflowed, now equals 6
   BNE IncDone
-	LDA #$F0
+  LDA #$F0
   STA TIMESECONDS2      ; Wrap digit to 0
   INC TIMEMINUTES1
   LDA TIMEMINUTES1
   CMP #$FA              ; Check if it overflowed, now equals 10
   BNE IncDone
-	LDA #$F0
+  LDA #$F0
   STA TIMEMINUTES1      ; Wrap digit to 0
   INC TIMEMINUTES2
   LDA TIMESECONDS2
   CMP #$F6              ; Check if it overflowed, now equals 6
   BNE IncDone
-	LDA #$F0
+  LDA #$F0
   STA TIMEMINUTES2      ; Wrap digit to 0
 IncDone:
   RTS
 
 ReadController:
-	LDA #$01
+  LDA #$01
   STA CTRL1
   LDA #$00
   STA CTRL1
   LDX #$08
 ReadControllerLoop:
-	LDA CTRL1
+  LDA CTRL1
   LSR A                 ; Bit 0 -> Carry
   ROL buttons           ; Carry -> bit 0; bit 7 -> Carry
   DEX
@@ -566,26 +566,26 @@ palette:
   .db $3b,$1a,$00,$3d, $3b,$19,$30,$1d, $3b,$20,$15,$01, $3b,$2e,$30,$3f
 
 sprites:
-	  ; vert tile attr horiz ; Player
+    ; vert tile attr horiz ; Player
   .db $00, $C9, $01, $00   ; sprite 0
   .db $00, $CA, $01, $00   ; sprite 1
   .db $00, $D9, $01, $00   ; sprite 2
   .db $00, $DA, $01, $00   ; sprite 3
 
-	  ; vert tile attr horiz ; Tooly
+    ; vert tile attr horiz ; Tooly
   .db $00, $11, $00, $00   ; sprite 0
   .db $00, $12, $00, $00   ; sprite 1
   .db $00, $21, $00, $00   ; sprite 2
   .db $00, $22, $00, $00   ; sprite 3
 
-	  ; vert tile attr horiz ; Clock
+    ; vert tile attr horiz ; Clock
   .db $C8, $f0, $00, $E9   ; Seconds 1
   .db $C8, $f0, $00, $E1   ; Seconds 2
   .db $C8, $fa, $00, $D9   ; :
   .db $C8, $f0, $00, $D1   ; Minutes 1
   .db $C8, $f0, $00, $C9   ; Minutes 2
 
-	  ; vert tile attr horiz ; Health
+    ; vert tile attr horiz ; Health
   .db $CF, $e5, $02, $28
   .db $CF, $e5, $02, $30
   .db $CF, $e5, $02, $38
@@ -693,7 +693,7 @@ collision: ; (x,y) coordinates, from (0,0) to (1F,1D)
   ; Right
   .dw $1D00,$1D01,$1D02,$1D03,$1D04,$1D05,$1D06,$1D07,$1D08,$1D09,$1D0A,$1D0B,$1D0C,$1D0D,$1D0E,$1D0F
   .dw $1D10,$1D11,$1D12,$1D13,$1D14,$1D15,$1D16,$1D17,$1D18,$1D19,$1D1A,$1D1B,$1D1C,$1D1D
-  ; 252 bytes
+
   ; Top tree
   .dw $1008,$1108,$1208,$1308,$1408,$1508,$1608,$1708
   ; Bottom tree
@@ -721,7 +721,7 @@ IRQ:
 
   .dw NMI
   .dw Reset
-	.dw IRQ
+  .dw IRQ
 
 ;----------------------------------------------------------------
 ; CHR-ROM
