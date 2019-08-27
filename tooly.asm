@@ -243,10 +243,15 @@ GameEngine:
   BEQ EnginePlaying
 
 GameEngineDone:
-	JSR UpdateSprites     ; Set sprites from positions
+  JSR UpdateSprites     ; Set sprites from positions
   RTI
 
 EngineTitle:
+  LDA buttons
+  CMP #%00010000
+  BNE EngineTitle
+  LDA #STATEPLAYING
+  STA gamestate
   JMP GameEngineDone
 
 EngineGameOver:
