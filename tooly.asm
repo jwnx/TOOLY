@@ -10,6 +10,12 @@
   PPUDATA        = $2007
   OAMDMA         = $4014
 
+  SQUARE1        = $4000
+  TRIANGLE       = $4008
+  DMC            = $4010
+  APUSTATUS      = $4015
+  FRAMECOUNTER   = $4017
+
   CTRL1          = $4016
 
   TIMESECONDS1   = $0221
@@ -113,14 +119,12 @@ LoadToPPULoop:
 Reset:
   SEI                   ; Disable IRQs
   CLD                   ; Disable decimal mode
-  LDX #$40
-  STX $4017             ; Disable APU frame IRQ
+  JSR SoundInit
   LDX #$FF
   TXS                   ; Set up stack
   INX                   ; Now X = 0
-  STX $2000             ; Disable NMI
-  STX $2001             ; Disable rendering
-  STX $4010             ; Disable DMC IRQs
+  STX PPUCTRL           ; Disable NMI
+  STX PPUMASK           ; Disable rendering
   JSR vblankwait
 
 clrmem:
@@ -225,6 +229,8 @@ NMI:
   LDA #$00              ; Tell the ppu there is no background scrolling
   STA PPUSCROLL
   STA PPUSCROLL
+
+  JSR SoundDisable
 
   ; All graphics updates done by here, run game engine
   JSR ReadController     ; Get the current button data
@@ -379,6 +385,7 @@ CheckHealthDown:
   DEC relieve
   JMP CheckHealthDownDone
 Bite:
+  JSR SoundPlayBite
   LDA #$10
   STA relieve
   DEC health
@@ -410,6 +417,7 @@ Recover:
   JSR CheckOverlap
   CMP #$01
   BNE CheckHealthUpDone
+  JSR SoundPlayRecover
   LDA #$10
   STA stuffed
   LDA health
@@ -552,6 +560,45 @@ ReadControllerLoop:
   ROL buttons           ; Carry -> bit 0; bit 7 -> Carry
   DEX
   BNE ReadControllerLoop
+  RTS
+
+;----------------------------------------------------------------
+; Sound
+;----------------------------------------------------------------
+
+SoundInit:
+  JSR SoundDisable
+  STX DMC               ; Disable DMC IRQs
+  STX APUSTATUS         ; Disable Square 1, Square 2, Triangle and Noise channels
+  LDX #$40
+  STX FRAMECOUNTER      ; Disable APU frame IRQ
+  RTS
+
+SoundDisable:
+  LDX #$00
+  STX APUSTATUS         ; Disable Square 1, Square 2, Triangle and Noise channels
+  RTS
+
+SoundPlayBite:
+  LDA #%00000001        ; Enable Square 1
+  STA APUSTATUS
+  LDA #%10111111        ; Duty 10, Volume F
+  STA SQUARE1
+  LDA #$C9              ; 0C9 is a C# in NTSC mode
+  STA SQUARE1+2
+  LDA #$00
+  STA SQUARE1+3
+  RTS
+
+SoundPlayRecover:
+  LDA #%00000100        ; Enable Triangle
+  STA APUSTATUS
+  LDA #%10000001        ; Reload counter value
+  STA TRIANGLE
+  LDA #$42              ; 042 plays a G# in NTSC mode
+  STA TRIANGLE+2
+  LDA #$00
+  STA TRIANGLE+3
   RTS
 
 ;----------------------------------------------------------------
@@ -717,7 +764,7 @@ waterandfood:
 IRQ:
   ; No IRQs
 
-  .org $fffa
+  .org $FFFA
 
   .dw NMI
   .dw Reset

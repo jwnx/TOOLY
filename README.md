@@ -13,4 +13,5 @@ A NES game
 * [PPU_programmer_reference](https://wiki.nesdev.com/w/index.php/PPU_programmer_reference)
 * [PPU registers](https://wiki.nesdev.com/w/index.php/PPU_registers)
 * [Sample RAM map](https://wiki.nesdev.com/w/index.php/Sample_RAM_map)
+* [Sound](https://safiire.github.io/blog/2015/03/29/creating-sound-on-the-nes/)
 * [Stack](https://wiki.nesdev.com/w/index.php/Stack)
